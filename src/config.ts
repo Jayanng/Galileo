@@ -1,0 +1,65 @@
+import 'dotenv/config';
+import { z } from 'zod';
+
+const truthy = new Set(['1', 'true', 'yes', 'on']);
+const boolEnv = (def: boolean) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined || v === '' ? def : truthy.has(v.toLowerCase())));
+
+// Accept a private key with or without the 0x prefix, normalise to 0x-form.
+const hexPrivateKey = z
+  .string()
+  .min(1, 'OPERATOR_PRIVATE_KEY is required')
+  .transform((s) => (s.startsWith('0x') ? s : `0x${s}`))
+  .refine((s) => /^0x[0-9a-fA-F]{64}$/.test(s), 'must be a 32-byte (64 hex char) private key');
+
+const schema = z.object({
+  // Telegram
+  TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required (get one from @BotFather)'),
+
+  // 0G Chain
+  OPERATOR_PRIVATE_KEY: hexPrivateKey,
+  OG_RPC: z.string().url().default('https://evmrpc-testnet.0g.ai'),
+  OG_CHAIN_ID: z.coerce.number().int().positive().default(16601),
+  WALLET_GAS_DRIP: z.string().default('0'),
+
+  // Key custody
+  WALLET_ENCRYPTION_KEY: z
+    .string()
+    .min(16, 'WALLET_ENCRYPTION_KEY should be a long random secret (>= 16 chars)'),
+  WALLET_STORE_PATH: z.string().default('.data/wallets.json'),
+
+  // 0G Storage (optional in this phase)
+  OG_STORAGE_ENABLED: boolEnv(false),
+  OG_INDEXER_RPC: z.string().url().default('https://indexer-storage-testnet-turbo.0g.ai'),
+  OG_KV_RPC: z.string().default('http://3.101.147.150:6789'),
+  OG_STREAM_ID: z.string().default(''),
+  OG_FLOW_CONTRACT: z.string().default(''),
+});
+
+export type AppConfig = z.infer<typeof schema>;
+
+function load(): AppConfig {
+  const parsed = schema.safeParse(process.env);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('\n');
+    throw new Error(
+      `Invalid environment configuration:\n${issues}\n\n` +
+        'Copy .env.example to .env and fill in the required values.',
+    );
+  }
+  const cfg = parsed.data;
+  if (cfg.OG_STORAGE_ENABLED && (!cfg.OG_STREAM_ID || !cfg.OG_FLOW_CONTRACT)) {
+    throw new Error(
+      'OG_STORAGE_ENABLED=true requires OG_STREAM_ID and OG_FLOW_CONTRACT to be set ' +
+        '(see the 0G Storage docs for the Galileo flow-contract address and your stream id).',
+    );
+  }
+  return cfg;
+}
+
+export const config = load();

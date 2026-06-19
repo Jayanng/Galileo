@@ -12,10 +12,13 @@ wallet whose memory, inference, and execution all live on 0G.
 ## What works today
 
 - A Telegram bot that boots against the **0G Galileo testnet**.
-- **Wallet generation (F4):** each Telegram user gets a freshly generated wallet on demand.
-  The private key is encrypted at rest (AES-256-GCM) and persisted keyed by the user.
-- Commands: `/wallet`, `/address` (with QR), `/balance`, plus light natural-language
-  routing (e.g. _"create me a wallet"_) as a placeholder for the F2 LLM agent.
+- **Wallet generation (F4):** each Telegram user can create **multiple named wallets** on
+  demand. After creating one, the bot asks you to name it. Every private key is encrypted at
+  rest (AES-256-GCM) and persisted keyed by the user.
+- Commands: `/wallet` (create + name), `/address` (an inline-button picker of your wallets —
+  tap one to see its address + QR + balance), `/balance` (balances across all your wallets),
+  plus light natural-language routing (e.g. _"create me a wallet"_) as a placeholder for the
+  F2 LLM agent.
 - Optional persistence of encrypted keys to **0G Storage KV** (off by default; local
   encrypted store is the default and fallback).
 
@@ -67,11 +70,14 @@ npm test           # crypto round-trip unit test
 Then DM your bot:
 
 1. `/start` → welcome.
-2. `/wallet` (or "create me a wallet") → generates your wallet, replies the address + QR.
-3. `/address` → shows your address again.
-4. `/balance` → reads your OG balance from 0G Chain.
+2. `/wallet` (or "create me a wallet") → generates a wallet, replies the address + QR, then
+   asks you to **name** it (send a name, or `/skip` to keep the default `Wallet N`).
+3. Repeat `/wallet` to create as many wallets as you like.
+4. `/address` → an inline-button list of your wallets; **tap one** to view its address + QR +
+   balance.
+5. `/balance` → balances across all your wallets, read from 0G Chain.
 
-The wallet survives restarts (encrypted in `WALLET_STORE_PATH`, default `.data/wallets.json`).
+Wallets survive restarts (encrypted in `WALLET_STORE_PATH`, default `.data/wallets.json`).
 
 ## Enabling 0G Storage persistence (optional)
 
@@ -100,7 +106,7 @@ src/
 
 | Feature | Status |
 | --- | --- |
-| **F4** On-Chain Wallet Generator | ✅ this phase |
+| **F4** On-Chain Wallet Generator | ✅ done — multiple named wallets per user |
 | **F1** Infinite Wallet Memory (0G Storage) | ⏳ planned |
 | **F2** Conversational Wallet (0G Compute LLM + tool-calling) | ⏳ planned |
 | **F3** Verifiable AI Portfolio Advisor | ⏳ planned |

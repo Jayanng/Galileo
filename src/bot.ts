@@ -17,6 +17,7 @@ import {
   handleHomeBack,
   handleNewWallet,
   handleChangeName,
+  handleFaq,
   handleNameReply,
   handleSkip,
 } from './handlers/walletHandlers';
@@ -56,6 +57,7 @@ export function buildBot(): Bot {
   bot.callbackQuery('home:rename', handleChangeName);
   bot.callbackQuery('home:back', handleHomeBack);
   bot.callbackQuery('home:new', handleNewWallet);
+  bot.callbackQuery('home:help', handleFaq);
 
   // 4) Wallet-view / key-reveal button taps
   bot.callbackQuery(/^wallet:(.+)$/, handleWalletCallback);

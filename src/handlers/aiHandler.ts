@@ -32,8 +32,8 @@ function setHistory(userId: string, history: ChatMessage[]): void {
  * the AI agent (which calls 0G Compute), and the agent's reply is sent
  * back to the user.
  *
- * IMPORTANT: This handler must be registered AFTER the `naming` interceptor
- * (so wallet-naming flow takes precedence) and AFTER all /commands.
+ * IMPORTANT: This handler must be registered AFTER all /commands and inline-button
+ * callback handlers, so they take precedence over free-text AI routing.
  */
 export async function handleAiMessage(ctx: Context): Promise<void> {
   const userId = ctx.from?.id ? String(ctx.from.id) : null;

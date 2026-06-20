@@ -6,8 +6,10 @@ import {
   getWalletBalance,
   getAllBalances,
   getWalletSecrets,
+  type WalletInfo,
   type WalletSecrets,
 } from '../wallet/walletService';
+import { getActiveId, setActiveId } from '../wallet/activeWallet';
 import { addressQr } from '../util/qr';
 import { formatOG } from '../og/chain';
 
@@ -18,28 +20,94 @@ function userIdOf(ctx: Context): string | null {
 
 const NO_WALLETS = "You don't have any wallets yet. Send /wallet to create one.";
 
+// ── Active wallet ────────────────────────────────────────────────────────────
+
+/** The user's selected wallet, defaulting to the first one if none is set. */
+async function resolveActive(userId: string, wallets: WalletInfo[]): Promise<WalletInfo | null> {
+  if (wallets.length === 0) return null;
+  const activeId = await getActiveId(userId);
+  return wallets.find((w) => w.id === activeId) ?? wallets[0]!;
+}
+
+// ── Home dashboard ───────────────────────────────────────────────────────────
+
+// Default wallet names ("Wallet 3") render as a compact "W3"; custom names show as-is.
+function walletLabel(w: WalletInfo, index: number, active: boolean): string {
+  const base = /^Wallet \d+$/.test(w.name) ? `W${index + 1}` : w.name;
+  return active ? `✅ ${base}` : base;
+}
+
+async function renderHome(userId: string): Promise<{ text: string; keyboard: InlineKeyboard }> {
+  const wallets = await listWallets(userId);
+  const kb = new InlineKeyboard();
+  const intro = [
+    '👋 *Welcome to Galileo*',
+    'Create addresses, manage portfolios, and get AI-driven replies.',
+  ];
+
+  if (wallets.length === 0) {
+    kb.text('➕ Create wallet', 'home:new');
+    return {
+      text: [...intro, '', 'You don’t have a wallet yet — create one to get started.'].join('\n'),
+      keyboard: kb,
+    };
+  }
+
+  const active = (await resolveActive(userId, wallets))!;
+  let balance: bigint | null = null;
+  try {
+    balance = await getWalletBalance(userId, active.id);
+  } catch {
+    balance = null;
+  }
+  const balanceStr = balance === null ? '—' : formatOG(balance);
+
+  const text = [
+    ...intro,
+    '',
+    `💰 You currently have *${balanceStr} OG* in *${active.name}*.`,
+    '',
+    '🔐 Export your wallet via *Settings → Export private key*.',
+  ].join('\n');
+
+  // Wallet selector, two per row, ✅ on the active one.
+  for (let i = 0; i < wallets.length; i += 2) {
+    const a = wallets[i]!;
+    kb.text(walletLabel(a, i, a.id === active.id), `sel:${a.id}`);
+    const b = wallets[i + 1];
+    if (b) kb.text(walletLabel(b, i + 1, b.id === active.id), `sel:${b.id}`);
+    kb.row();
+  }
+  kb.text('📥 Deposit', 'home:deposit').text('⚙️ Settings', 'home:settings').row();
+  kb.text('➕ New wallet', 'home:new');
+
+  return { text, keyboard: kb };
+}
+
+async function refreshHome(ctx: Context, userId: string): Promise<void> {
+  const { text, keyboard } = await renderHome(userId);
+  try {
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  } catch {
+    // "message is not modified" or uneditable — ignore.
+  }
+}
+
 export async function handleStart(ctx: Context): Promise<void> {
-  await ctx.reply(
-    [
-      '👋 *0G Memory Wallet*',
-      '',
-      'An AI-native wallet on the 0G stack. Hold multiple wallets and just talk to me in plain language.',
-      '',
-      '• `/wallet` — create a new wallet (shows your key + seed once)',
-      '• `/address` — pick a wallet to view its address + QR',
-      '• `/balance` — balances across all your wallets',
-      '• `/privatekey` — reveal a wallet’s private key & seed phrase',
-      '',
-      'Or just say _"create me a wallet"_, _"what’s my balance?"_, _"rename Wallet 1 to Savings"_.',
-    ].join('\n'),
-    { parse_mode: 'Markdown' },
-  );
+  const userId = userIdOf(ctx);
+  if (!userId) {
+    await ctx.reply('Sorry, I could not identify your account.');
+    return;
+  }
+  const { text, keyboard } = await renderHome(userId);
+  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
 }
 
 export async function handleHelp(ctx: Context): Promise<void> {
   await ctx.reply(
     [
       'Commands:',
+      '/start — open your wallet dashboard',
       '/wallet — create a new wallet (reveals key + seed once)',
       '/address — choose a wallet to view (address + QR)',
       '/balance — balances of all your wallets',
@@ -96,6 +164,19 @@ async function sendCleanAddress(
   });
 }
 
+/** Create a wallet, make it active, and reveal its key + seed. */
+async function createAndReveal(ctx: Context, userId: string): Promise<void> {
+  await ctx.replyWithChatAction('upload_photo');
+  const wallet = await createWallet(userId);
+  await setActiveId(userId, wallet.id);
+  const secrets = await getWalletSecrets(userId, wallet.id);
+  if (!secrets) {
+    await ctx.reply('Wallet created, but I could not read it back. Try /privatekey.');
+    return;
+  }
+  await sendReveal(ctx, secrets);
+}
+
 // ── Commands ────────────────────────────────────────────────────────────────
 
 export async function handleCreateWallet(ctx: Context): Promise<void> {
@@ -104,14 +185,7 @@ export async function handleCreateWallet(ctx: Context): Promise<void> {
     await ctx.reply('Sorry, I could not identify your account.');
     return;
   }
-  await ctx.replyWithChatAction('upload_photo');
-  const wallet = await createWallet(userId);
-  const secrets = await getWalletSecrets(userId, wallet.id);
-  if (!secrets) {
-    await ctx.reply('Wallet created, but I could not read it back. Try /privatekey.');
-    return;
-  }
-  await sendReveal(ctx, secrets);
+  await createAndReveal(ctx, userId);
 }
 
 export async function handleListAddresses(ctx: Context): Promise<void> {
@@ -166,6 +240,81 @@ export async function handleBalance(ctx: Context): Promise<void> {
   }
   const lines = balances.map((b) => `• *${b.name}* — ${formatOG(b.balance)} OG`);
   await ctx.reply(['💰 *Your balances:*', ...lines].join('\n'), { parse_mode: 'Markdown' });
+}
+
+// ── Home dashboard callbacks ─────────────────────────────────────────────────
+
+export async function handleSelectWallet(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  const walletId = ctx.callbackQuery?.data?.match(/^sel:(.+)$/)?.[1];
+  if (!userId || !walletId) {
+    await ctx.answerCallbackQuery();
+    return;
+  }
+  await setActiveId(userId, walletId);
+  const wallet = await getWallet(userId, walletId);
+  await ctx.answerCallbackQuery({ text: wallet ? `Active: ${wallet.name}` : 'Selected' });
+  await refreshHome(ctx, userId);
+}
+
+export async function handleDeposit(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  const active = await resolveActive(userId, await listWallets(userId));
+  if (!active) {
+    await ctx.reply('Create a wallet first (tap “New wallet”).');
+    return;
+  }
+  await sendCleanAddress(ctx, active);
+}
+
+export async function handleSettings(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  const active = await resolveActive(userId, await listWallets(userId));
+  const text = active ? `⚙️ *Settings* — active wallet: *${active.name}*` : '⚙️ *Settings*';
+  const kb = new InlineKeyboard()
+    .text('🔑 Export private key', 'home:export')
+    .row()
+    .text('⬅️ Back', 'home:back');
+  try {
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: kb });
+  } catch {
+    // ignore
+  }
+}
+
+export async function handleExport(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  const active = await resolveActive(userId, await listWallets(userId));
+  if (!active) {
+    await ctx.reply('Create a wallet first.');
+    return;
+  }
+  const secrets = await getWalletSecrets(userId, active.id);
+  if (!secrets) {
+    await ctx.reply('Could not read that wallet.');
+    return;
+  }
+  await sendReveal(ctx, secrets);
+}
+
+export async function handleHomeBack(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  await refreshHome(ctx, userId);
+}
+
+export async function handleNewWallet(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  await createAndReveal(ctx, userId);
 }
 
 // ── Private key / seed reveal (explicit, command + button only) ──────────────

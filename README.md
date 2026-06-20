@@ -83,7 +83,9 @@ npm test           # crypto round-trip unit test
 
 Then DM your bot:
 
-1. `/start` → welcome.
+1. `/start` → your wallet **dashboard**: shows your active wallet's balance, a wallet
+   selector (✅ marks the active one), plus **Deposit** (address + QR) and **Settings → Export
+   private key**. Tap a wallet to make it active.
 2. Try natural language: *"Create me a wallet called savings"*, *"Show my wallets"*,
    *"What's my balance?"*, *"Rename my wallet to main"*.
 3. Commands still work: `/wallet`, `/address`, `/balance`, `/privatekey`.

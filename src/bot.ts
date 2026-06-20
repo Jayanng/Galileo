@@ -10,6 +10,12 @@ import {
   handlePrivateKeyCommand,
   handleRevealPrivateKey,
   handleSavedKey,
+  handleSelectWallet,
+  handleDeposit,
+  handleSettings,
+  handleExport,
+  handleHomeBack,
+  handleNewWallet,
 } from './handlers/walletHandlers';
 import { handleAiMessage } from './handlers/aiHandler';
 
@@ -24,7 +30,15 @@ export function buildBot(): Bot {
   bot.command('balance', handleBalance);
   bot.command('privatekey', handlePrivateKeyCommand);
 
-  // Inline-button taps
+  // Home-dashboard button taps
+  bot.callbackQuery(/^sel:(.+)$/, handleSelectWallet);
+  bot.callbackQuery('home:deposit', handleDeposit);
+  bot.callbackQuery('home:settings', handleSettings);
+  bot.callbackQuery('home:export', handleExport);
+  bot.callbackQuery('home:back', handleHomeBack);
+  bot.callbackQuery('home:new', handleNewWallet);
+
+  // Wallet-view / key-reveal button taps
   bot.callbackQuery(/^wallet:(.+)$/, handleWalletCallback);
   bot.callbackQuery(/^pk:(.+)$/, handleRevealPrivateKey);
   bot.callbackQuery(/^saved:(.+)$/, handleSavedKey);

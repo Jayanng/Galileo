@@ -14,6 +14,7 @@ import { getActiveId, setActiveId } from '../wallet/activeWallet';
 import { naming } from '../wallet/namingState';
 import { addressQr } from '../util/qr';
 import { formatOG } from '../og/chain';
+import { FAQ_TEXT } from '../faq';
 
 function userIdOf(ctx: Context): string | null {
   const id = ctx.from?.id;
@@ -81,7 +82,7 @@ async function renderHome(userId: string): Promise<{ text: string; keyboard: Inl
     kb.row();
   }
   kb.text('📥 Deposit', 'home:deposit').text('⚙️ Settings', 'home:settings').row();
-  kb.text('➕ New wallet', 'home:new');
+  kb.text('➕ New wallet', 'home:new').text('❓ Help', 'home:help');
 
   return { text, keyboard: kb };
 }
@@ -308,6 +309,16 @@ export async function handleHomeBack(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery();
   if (!userId) return;
   await refreshHome(ctx, userId);
+}
+
+export async function handleFaq(ctx: Context): Promise<void> {
+  await ctx.answerCallbackQuery();
+  const kb = new InlineKeyboard().text('⬅️ Back', 'home:back');
+  try {
+    await ctx.editMessageText(FAQ_TEXT, { parse_mode: 'Markdown', reply_markup: kb });
+  } catch {
+    await ctx.reply(FAQ_TEXT, { parse_mode: 'Markdown' });
+  }
 }
 
 export async function handleNewWallet(ctx: Context): Promise<void> {

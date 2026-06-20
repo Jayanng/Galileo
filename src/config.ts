@@ -22,7 +22,7 @@ const schema = z.object({
   // 0G Chain
   OPERATOR_PRIVATE_KEY: hexPrivateKey,
   OG_RPC: z.string().url().default('https://evmrpc-testnet.0g.ai'),
-  OG_CHAIN_ID: z.coerce.number().int().positive().default(16601),
+  OG_CHAIN_ID: z.coerce.number().int().positive().default(16602),
   WALLET_GAS_DRIP: z.string().default('0'),
 
   // Key custody
@@ -36,7 +36,17 @@ const schema = z.object({
   OG_INDEXER_RPC: z.string().url().default('https://indexer-storage-testnet-turbo.0g.ai'),
   OG_KV_RPC: z.string().default('http://3.101.147.150:6789'),
   OG_STREAM_ID: z.string().default(''),
-  OG_FLOW_CONTRACT: z.string().default(''),
+  OG_FLOW_CONTRACT: z.string().default('0x22E03a6A89B950F1c82ec5e74F8eCa321a105296'),
+
+  // 0G Compute (Router path — OpenAI-compatible)
+  OG_COMPUTE_API_KEY: z
+    .string()
+    .min(1, 'OG_COMPUTE_API_KEY is required (get one at https://pc.testnet.0g.ai)'),
+  OG_COMPUTE_BASE_URL: z
+    .string()
+    .url()
+    .default('https://router-api-testnet.integratenetwork.work/v1'),
+  OG_COMPUTE_MODEL: z.string().default('qwen/qwen2.5-omni-7b'),
 });
 
 export type AppConfig = z.infer<typeof schema>;

@@ -12,17 +12,18 @@ wallet whose memory, inference, and execution all live on 0G.
 
 - A Telegram bot that boots against the **0G Galileo testnet**.
 - **Wallet generation (F4):** each Telegram user can create **multiple named wallets** on
-  demand. On creation the bot reveals the wallet's **private key + seed phrase** once, behind
-  an "I've saved my private key" button that deletes the message when tapped. Keys and seeds
-  are encrypted at rest (AES-256-GCM) and persisted keyed by the user.
+  demand via the `/start` dashboard. On creation the bot reveals the wallet's **private key**
+  (+ address & QR) behind an "I've saved my private key" button that deletes the message when
+  tapped, then prompts you to name the wallet. Keys are encrypted at rest (AES-256-GCM) and
+  persisted keyed by the user. (The seed phrase is also stored encrypted but not shown.)
 - **Conversational agent (F2):** natural-language understanding via **0G Compute** (decentralized,
   TEE-backed inference). The agent can create wallets, list wallets, check balances, get wallet
   addresses, and rename wallets — all by understanding plain English instructions.
 - **Multilingual (F7):** the agent auto-detects the user's language and responds in kind —
   English, Pidgin English, Yoruba, Igbo, Hausa, French, Spanish, Indonesian, Chinese, Arabic.
-- Commands: `/start`, `/help`, `/wallet` (create + reveal key/seed), `/address` (inline-button
-  picker of your wallets), `/balance` (balances across all wallets), `/privatekey` (reveal a
-  selected wallet's key + seed).
+- Commands: `/start` (wallet dashboard), `/help`, `/wallet` (create + reveal key), `/address`
+  (inline-button picker of your wallets), `/balance` (balances across all wallets),
+  `/privatekey` (reveal a selected wallet's key), `/skip` (keep the default name).
 - Optional persistence of encrypted keys to **0G Storage KV** (off by default; local
   encrypted store is the default and fallback).
 

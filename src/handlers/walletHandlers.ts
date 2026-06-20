@@ -3,6 +3,7 @@ import {
   createWallet,
   listWallets,
   getWallet,
+  renameWallet,
   getWalletBalance,
   getAllBalances,
   getWalletSecrets,
@@ -10,6 +11,7 @@ import {
   type WalletSecrets,
 } from '../wallet/walletService';
 import { getActiveId, setActiveId } from '../wallet/activeWallet';
+import { naming } from '../wallet/namingState';
 import { addressQr } from '../util/qr';
 import { formatOG } from '../og/chain';
 
@@ -111,7 +113,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
       '/wallet — create a new wallet (reveals key + seed once)',
       '/address — choose a wallet to view (address + QR)',
       '/balance — balances of all your wallets',
-      '/privatekey — reveal a wallet’s private key & seed phrase',
+      '/privatekey — reveal a wallet’s private key',
       '/help — this message',
       '',
       'You can also just chat: "create a wallet called savings", "rename Wallet 1 to main", "what’s my balance?"',
@@ -135,12 +137,8 @@ function secretCaption(s: WalletSecrets): string {
     '🔑 *Private key*',
     `\`${s.privateKey}\``,
     '',
-    ...(s.mnemonic
-      ? ['📝 *Seed phrase*', `\`${s.mnemonic}\``]
-      : ['📝 *Seed phrase:* _not available for this wallet_']),
-    '',
-    '⚠️ Anyone with your private key or seed phrase controls this wallet. Save them somewhere safe and never share them.',
-    'Tap the button below once you have saved them.',
+    '⚠️ Anyone with your private key controls this wallet. Save it somewhere safe and never share it.',
+    'Tap the button below once you have saved it.',
   ].join('\n');
 }
 
@@ -278,6 +276,8 @@ export async function handleSettings(ctx: Context): Promise<void> {
   const kb = new InlineKeyboard()
     .text('🔑 Export private key', 'home:export')
     .row()
+    .text('✏️ Change name', 'home:rename')
+    .row()
     .text('⬅️ Back', 'home:back');
   try {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: kb });
@@ -332,7 +332,7 @@ export async function handlePrivateKeyCommand(ctx: Context): Promise<void> {
   }
   const kb = new InlineKeyboard();
   for (const w of wallets) kb.text(w.name, `pk:${w.id}`).row();
-  await ctx.reply('⚠️ Reveal a wallet’s *private key & seed phrase*. Tap the wallet:', {
+  await ctx.reply('⚠️ Reveal a wallet’s *private key*. Tap the wallet:', {
     reply_markup: kb,
     parse_mode: 'Markdown',
   });
@@ -365,5 +365,63 @@ export async function handleSavedKey(ctx: Context): Promise<void> {
     // Message older than 48h or already deleted — ignore.
   }
   const wallet = await getWallet(userId, walletId);
-  if (wallet) await sendCleanAddress(ctx, wallet);
+  if (!wallet) return;
+
+  // Prompt the user to name the wallet — their next message is captured as the name.
+  naming.set(userId, walletId);
+  const png = await addressQr(wallet.address);
+  await ctx.replyWithPhoto(new InputFile(png, 'wallet.png'), {
+    caption: [
+      `*${wallet.name}*`,
+      '',
+      `\`${wallet.address}\``,
+      '',
+      'What would you like to name this wallet? Send a name, or /skip to keep it.',
+    ].join('\n'),
+    parse_mode: 'Markdown',
+  });
+}
+
+// ── Wallet naming (after key-save, or Settings → Change name) ────────────────
+
+export async function handleNameReply(ctx: Context, text: string): Promise<void> {
+  const userId = userIdOf(ctx);
+  const walletId = userId ? naming.get(userId) : undefined;
+  if (!userId || !walletId) return;
+  const name = text.trim().slice(0, 32);
+  if (!name) {
+    await ctx.reply('That name is empty — send a short name, or /skip.');
+    return;
+  }
+  await renameWallet(userId, walletId, name);
+  naming.clear(userId);
+  const wallet = await getWallet(userId, walletId);
+  await ctx.reply(`✅ Saved as *${wallet?.name ?? name}*.`, { parse_mode: 'Markdown' });
+}
+
+export async function handleSkip(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  const walletId = userId ? naming.get(userId) : undefined;
+  if (!userId || !walletId) {
+    await ctx.reply('Nothing to name right now.');
+    return;
+  }
+  naming.clear(userId);
+  const wallet = await getWallet(userId, walletId);
+  await ctx.reply(`Kept the name${wallet ? ` *${wallet.name}*` : ''}.`, { parse_mode: 'Markdown' });
+}
+
+export async function handleChangeName(ctx: Context): Promise<void> {
+  const userId = userIdOf(ctx);
+  await ctx.answerCallbackQuery();
+  if (!userId) return;
+  const active = await resolveActive(userId, await listWallets(userId));
+  if (!active) {
+    await ctx.reply('Create a wallet first.');
+    return;
+  }
+  naming.set(userId, active.id);
+  await ctx.reply(`✏️ Send a new name for *${active.name}* (or /skip to keep it).`, {
+    parse_mode: 'Markdown',
+  });
 }

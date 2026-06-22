@@ -5,9 +5,10 @@ import {
   getWalletBalance,
   getAllBalances,
   renameWallet,
+  getOnChainTxCount,
 } from '../wallet/walletService';
 import { formatOG } from '../og/chain';
-import { search } from './memory';
+import { search, transactionStats } from './memory';
 import { prepareSwap } from '../swap/swapService';
 
 /**
@@ -172,6 +173,50 @@ export async function executeTool(
           data: {
             count: results.length,
             results,
+          },
+        };
+      }
+
+      case 'transaction_stats': {
+        const timeRange = typeof args.timeRange === 'string' ? args.timeRange : undefined;
+        let fromTs: number | undefined;
+        let toTs: number | undefined;
+        if (timeRange && timeRange !== 'all') {
+          const now = Date.now();
+          toTs = now;
+          switch (timeRange) {
+            case 'today': {
+              const d = new Date();
+              fromTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+              break;
+            }
+            case 'yesterday':
+              fromTs = now - 86400000;
+              break;
+            case 'last7days':
+              fromTs = now - 7 * 86400000;
+              break;
+            case 'last30days':
+              fromTs = now - 30 * 86400000;
+              break;
+            default:
+              toTs = undefined;
+              break;
+          }
+        }
+        const [stats, onChainTxCount] = await Promise.all([
+          transactionStats(userId, fromTs, toTs),
+          getOnChainTxCount(userId),
+        ]);
+        return {
+          success: true,
+          data: {
+            onChainTxCount,
+            recordedCount: stats.count,
+            byType: stats.byType,
+            volumeByUnit: stats.volumeByUnit,
+            note:
+              'onChainTxCount is the true number of on-chain transactions sent from the user\'s wallets. volumeByUnit covers only bot-recorded sends/swaps.',
           },
         };
       }

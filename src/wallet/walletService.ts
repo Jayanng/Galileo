@@ -119,6 +119,25 @@ export interface AssetBalance {
   balance: bigint;
 }
 
+/**
+ * Total on-chain transactions initiated across all the user's wallets.
+ * An address's nonce equals the number of transactions it has sent, so summing
+ * nonces gives the true count of outgoing txs (best-effort per wallet).
+ */
+export async function getOnChainTxCount(userId: string): Promise<number> {
+  const wallets = await walletStore.list(userId);
+  const counts = await Promise.all(
+    wallets.map(async (w) => {
+      try {
+        return await provider.getTransactionCount(w.address);
+      } catch {
+        return 0;
+      }
+    }),
+  );
+  return counts.reduce((a, b) => a + b, 0);
+}
+
 /** Configured non-native tokens (WOG, USDC, USDT) that have an address set. */
 function configuredTokens(): { symbol: string; address: string }[] {
   const list: { symbol: string; address: string }[] = [];

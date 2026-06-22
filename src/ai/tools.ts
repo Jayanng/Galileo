@@ -147,6 +147,25 @@ export const toolDefinitions: ChatTool[] = [
   {
     type: 'function',
     function: {
+      name: 'transaction_stats',
+      description:
+        "Get the user's transaction totals. Use this whenever the user asks how many transactions they've done, their total transaction count, total volume, how much they've sent/swapped, or 'my activity totals'. Returns: onChainTxCount (true count of on-chain transactions sent across all their wallets), recordedCount (transactions this bot has logged), byType (breakdown like { send: 3, swap: 2 }), and volumeByUnit (total amount transacted per token, e.g. { OG: \"1.6\", USDC: \"200\" }). Volume is only known for transactions done through this bot.",
+      parameters: {
+        type: 'object',
+        properties: {
+          timeRange: {
+            type: 'string',
+            description:
+              'Optional preset to limit the recorded stats by time: "today", "yesterday", "last7days", "last30days", or "all" (default). Affects recordedCount/byType/volumeByUnit; onChainTxCount is always all-time.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'swap',
       description:
         "PREPARE a token swap from the user's active wallet on 0G Galileo. This does NOT execute — it stages the swap and the user must tap a Confirm button afterward. Supports wrap (OG → WOG) and unwrap (WOG → OG) today; token-to-token needs a configured DEX. After calling this, tell the user the swap is prepared and ask them to tap Confirm.",

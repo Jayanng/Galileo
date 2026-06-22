@@ -198,6 +198,54 @@ export async function recordTx(
   saveHistory(userId, history).catch(() => {});
 }
 
+export interface TxStats {
+  count: number; // total transactions the bot has recorded
+  byType: Record<string, number>; // e.g. { send: 3, swap: 2 }
+  volumeByUnit: Record<string, string>; // summed amount per token unit, e.g. { OG: "1.6", USDC: "200" }
+}
+
+/** Round a float to a clean decimal string (drops float noise + trailing zeros). */
+function cleanNum(n: number): string {
+  return Number(n.toFixed(6)).toString();
+}
+
+/**
+ * Aggregate the user's bot-recorded transactions: total count, a per-type
+ * breakdown, and total volume summed per token unit. Amounts are stored as
+ * labels like "0.1 OG" / "5 WOG", so we parse the leading number + unit.
+ */
+export async function transactionStats(
+  userId: string,
+  fromTs?: number,
+  toTs?: number,
+): Promise<TxStats> {
+  const history = await loadHistory(userId);
+  const byType: Record<string, number> = {};
+  const volume: Record<string, number> = {};
+  let count = 0;
+
+  for (const entry of history.entries) {
+    if (entry.kind !== 'tx') continue;
+    const tx = entry.data as StoredTx;
+    if (fromTs && tx.ts < fromTs) continue;
+    if (toTs && tx.ts > toTs) continue;
+    count++;
+    byType[tx.type] = (byType[tx.type] ?? 0) + 1;
+    if (tx.amount) {
+      const m = tx.amount.match(/([\d.]+)\s*([A-Za-z]+)?/);
+      if (m) {
+        const val = parseFloat(m[1]!);
+        const unit = (m[2] ?? 'OG').toUpperCase();
+        if (!Number.isNaN(val)) volume[unit] = (volume[unit] ?? 0) + val;
+      }
+    }
+  }
+
+  const volumeByUnit: Record<string, string> = {};
+  for (const [unit, val] of Object.entries(volume)) volumeByUnit[unit] = cleanNum(val);
+  return { count, byType, volumeByUnit };
+}
+
 /**
  * Get the N most recent MESSAGE entries for a user.
  *

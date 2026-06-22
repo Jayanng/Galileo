@@ -1,147 +1,383 @@
 # 0G Memory Wallet
 
-An AI-native Telegram wallet bot built on the **0G stack** (0G Chain · 0G Compute · 0G
-Storage) — a submission for the ZERO CUP / 0G Hackathon. The product is a conversational
-wallet whose memory, inference, and execution all live on 0G.
+<div align="center">
 
-> **Current phase:** F2 shipped — **Conversational Wallet Agent** running on 0G Compute.
-> Users can manage wallets using natural language in English, Pidgin, Yoruba, French, and
-> more. The agent decides when to call tools and when to answer from context.
+**An AI-native Telegram wallet assistant built on the 0G blockchain stack**
 
-## What works today
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![0G Chain](https://img.shields.io/badge/0G-Galileo%20Testnet-00D4AA)](https://0g.ai)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-- A Telegram bot that boots against the **0G Galileo testnet**.
-- **Wallet generation (F4):** each Telegram user can create **multiple named wallets** on
-  demand via the `/start` dashboard. On creation the bot reveals the wallet's **private key**
-  (+ address & QR) behind an "I've saved my private key" button that deletes the message when
-  tapped, then prompts you to name the wallet. Keys are encrypted at rest (AES-256-GCM) and
-  persisted keyed by the user. (The seed phrase is also stored encrypted but not shown.)
-- **Conversational agent (F2):** natural-language understanding via **0G Compute** (decentralized,
-  TEE-backed inference). The agent can create wallets, list wallets, check balances, get wallet
-  addresses, and rename wallets — all by understanding plain English instructions.
-- **Multilingual (F7):** the agent auto-detects the user's language and responds in kind —
-  English, Pidgin English, Yoruba, Igbo, Hausa, French, Spanish, Indonesian, Chinese, Arabic.
-- Commands: `/start` (wallet dashboard), `/help`, `/wallet` (create + reveal key), `/address`
-  (inline-button picker of your wallets), `/balance` (balances across all wallets),
-  `/privatekey` (reveal a selected wallet's key), `/skip` (keep the default name).
-- Optional persistence of encrypted keys to **0G Storage KV** (off by default; local
-  encrypted store is the default and fallback).
+[Features](#features) • [Architecture](#architecture) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Usage](#usage) • [Project Structure](#project-structure) • [Roadmap](#roadmap)
+
+</div>
+
+---
+
+## Overview
+
+0G Memory Wallet is a conversational Telegram bot that lets users manage cryptocurrency wallets using **natural language**. Built entirely on the 0G decentralized stack:
+
+| Layer | Technology |
+|---|---|
+| **Chain** | 0G Galileo testnet (Chain ID 16602) |
+| **Compute** | 0G Compute Router (decentralized, TEE-backed LLM inference) |
+| **Storage** | 0G Storage (permanent, immutable memory) |
+| **AI Model** | Qwen 2.5 Omni 7B (via 0G Compute) |
+
+Users can create wallets, check balances, view addresses, rename wallets, and recall past activity — all by typing plain English (or Pidgin, Yoruba, French, and 7+ other languages).
+
+---
+
+## Features
+
+### 💬 Natural Language Interface
+
+No commands to learn. Just type what you want:
+
+```
+"create me a wallet"
+"what's my balance?"
+"show my wallets"
+"rename my savings wallet"
+"what did I do last week?"
+```
+
+The AI agent understands your intent and executes the appropriate actions.
+
+### 🧠 Permanent Memory (F1)
+
+Every interaction is permanently stored on 0G Storage. The bot remembers:
+
+- All past messages and conversations
+- Wallet creation history with timestamps
+- Previous tool calls and their results
+- On-chain transactions
+
+Memory survives bot restarts — ask "what did I do yesterday?" and get an accurate answer.
+
+### 👛 Multi-Wallet Management
+
+- Create multiple named wallets per user
+- View wallet addresses with QR codes
+- Check OG token balances
+- Rename wallets anytime
+- View private keys securely (one-tap hide)
+
+### 🌍 Multi-Language Support
+
+Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, French, Spanish, Indonesian, Chinese, Arabic.
+
+### 🔒 Security
+
+- Private keys encrypted at rest (AES-256-GCM)
+- Keys revealed only via explicit `/privatekey` command
+- Operator wallet handles gas and storage writes
+- Per-user wallets are independently generated
+
+### ⚡ Progressive UX
+
+- Loading states for long operations
+- Quick-action buttons for common tasks
+- Smart message splitting (handles >4096 character responses)
+- Typing indicators during LLM inference
+
+---
 
 ## Architecture
 
 ```
-Telegram (grammY)
-      │
-   handlers ──► aiHandler ──► agent ──► 0G Compute (Router)
-      │                           │            │
-      │                      toolExecutor   tool definitions
-      │                           │
-      └───────────────────► walletService (F4)
-                              │   ├─ crypto.ts      AES-256-GCM key encryption
-                              │   └─ walletStore    local encrypted store ⇄ 0G Storage KV
-                              ├─ og/chain.ts        ethers v6 provider + operator wallet
-                              └─ og/storage.ts      0G Storage KV (Indexer + Batcher + KvClient)
+┌─────────────────────────────────────────────────────────┐
+│                      Telegram                           │
+│                    (grammY Bot)                          │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────┐
+│                   handler layer                          │
+│                                                         │
+│  ┌─────────────────┐  ┌──────────────────────────────┐  │
+│  │ walletHandlers  │  │         aiHandler             │  │
+│  │ (commands +     │  │  (natural language routing)   │  │
+│  │  button taps)   │  │                               │  │
+│  └────────┬────────┘  └──────────────┬────────────────┘  │
+└───────────┼──────────────────────────┼────────────────────┘
+            │                          │
+┌───────────▼──────────────────────────▼────────────────────┐
+│                    agent layer                             │
+│                                                           │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │              runAgent() loop                          │ │
+│  │  1. Build system prompt + memory context             │ │
+│  │  2. Call 0G Compute (LLM) with tool definitions      │ │
+│  │  3. Execute tool calls via toolExecutor               │ │
+│  │  4. Loop until LLM produces final answer (max 5)     │ │
+│  │  5. Persist interaction to 0G Storage                │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                           │                                │
+│  ┌────────────────────────▼───────────────────────────┐   │
+│  │  tools.ts · toolExecutor.ts · systemPrompt.ts      │   │
+│  │  memory.ts · fileStorage.ts                        │   │
+│  └────────────────────────────────────────────────────┘   │
+└──────────────────────────┬─────────────────────────────────┘
+                           │
+┌──────────────────────────▼─────────────────────────────────┐
+│                   service layer                             │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ walletService │  │   crypto.ts  │  │    walletStore   │  │
+│  │ (F4 wallet    │  │ AES-256-GCM  │  │  local + 0G KV   │  │
+│  │  generator)   │  │ encrypt/     │  │  persistence     │  │
+│  │               │  │ decrypt      │  │                  │  │
+│  └──────┬───────┘  └──────────────┘  └──────────────────┘  │
+└─────────┼───────────────────────────────────────────────────┘
+          │
+┌─────────▼───────────────────────────────────────────────────┐
+│                   0G blockchain layer                        │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │  chain.ts    │  │  compute.ts  │  │   storage.ts     │  │
+│  │ ethers v6    │  │ OpenAI SDK   │  │ 0G Storage KV    │  │
+│  │ RPC provider │  │ 0G Compute   │  │ Indexer/Batcher  │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Flow:** a user's text message hits `aiHandler` → the agent loop builds a message history and
-calls 0G Compute with tool definitions → if the LLM requests a tool call, `toolExecutor`
-dispatches it to `walletService` → results loop back to the LLM → final reply is sent to
-the user. The loop is capped at 5 iterations for safety.
+### Data Flow
 
-**Key custody:** a single **operator wallet** (`OPERATOR_PRIVATE_KEY`) pays gas and signs
-Storage writes; per-user wallets are generated by F4 and their keys encrypted with
-`WALLET_ENCRYPTION_KEY`.
+1. **User sends message** → `aiHandler` receives the text
+2. **History loaded** → Past interactions fetched from 0G Storage (or in-memory cache)
+3. **Memory context built** → Recent + earliest entries formatted for LLM context
+4. **LLM inference** → 0G Compute processes the prompt with tool definitions
+5. **Tool execution** → If LLM requests a tool (create wallet, check balance, etc.), `toolExecutor` dispatches it
+6. **Result loop** → Tool results fed back to LLM for final response
+7. **Persistence** → Interaction saved to 0G Storage (best-effort, non-blocking)
+8. **Reply** → Response sent to user with quick-action buttons
 
-## Prerequisites
+---
 
-- **Node.js ≥ 20** (developed on 22).
-- A **Telegram bot token** from [@BotFather](https://t.me/BotFather).
-- An **operator wallet** funded with testnet OG from the
-  [0G faucet](https://faucet.0g.ai) (needed for gas / the optional new-wallet gas drip).
-- A **0G Compute API key** from [pc.testnet.0g.ai](https://pc.testnet.0g.ai) (deposit ~0.05 OG
-  to activate it for inference).
+## Tech Stack
 
-## Setup
+| Category | Technology |
+|---|---|
+| **Runtime** | Node.js ≥20, TypeScript 5.7 |
+| **Bot Framework** | grammY (Telegram) |
+| **Blockchain** | ethers v6, 0G Galileo testnet |
+| **AI Inference** | 0G Compute Router (OpenAI-compatible) |
+| **AI Model** | Qwen 2.5 Omni 7B |
+| **Storage** | 0G Storage (File Mode + KV) |
+| **Encryption** | AES-256-GCM |
+| **Validation** | zod |
+| **Dev Tools** | tsx (TypeScript executor), tsd (typecheck) |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- **Node.js ≥20** (developed on 22)
+- **Telegram bot token** — get one from [@BotFather](https://t.me/BotFather)
+- **Operator wallet** — funded with testnet OG from the [0G faucet](https://faucet.0g.ai)
+- **0G Compute API key** — get one at [pc.testnet.0g.ai](https://pc.testnet.0g.ai) (deposit ~0.05 OG to activate)
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/Jayanng/Galileo.git
+cd Galileo
+
+# Install dependencies
 npm install
+
+# Configure environment
 cp .env.example .env
-# then edit .env and fill in:
-#   TELEGRAM_BOT_TOKEN, OPERATOR_PRIVATE_KEY, WALLET_ENCRYPTION_KEY
-#   OG_COMPUTE_API_KEY (get one at https://pc.testnet.0g.ai)
 ```
 
-The Galileo testnet uses **Chain ID 16602** (0G token symbol).
+### Configuration
 
-## Run
+Edit `.env` with your credentials:
+
+```env
+# Required
+TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather
+OPERATOR_PRIVATE_KEY=your_operator_wallet_key
+WALLET_ENCRYPTION_KEY=a_long_random_secret_key_16_chars_min
+OG_COMPUTE_API_KEY=your_key_from_pc_testnet_0g_ai
+```
+
+See [Configuration Reference](#configuration-reference) for all available options.
+
+### Run
 
 ```bash
-npm run dev        # watch mode (tsx)
-npm start          # run once
-npm run typecheck  # tsc --noEmit
-npm test           # crypto round-trip unit test
+# Development (watch mode)
+npm run dev
+
+# Production
+npm start
+
+# Type-check
+npm run typecheck
+
+# Run tests
+npm test
 ```
 
-Then DM your bot:
+### First Use
 
-1. `/start` → your wallet **dashboard**: shows your active wallet's balance, a wallet
-   selector (✅ marks the active one), plus **Deposit** (address + QR) and **Settings → Export
-   private key**. Tap a wallet to make it active.
-2. Try natural language: *"Create me a wallet called savings"*, *"Show my wallets"*,
-   *"What's my balance?"*, *"Rename my wallet to main"*.
-3. Commands still work: `/wallet`, `/address`, `/balance`, `/privatekey`.
-4. Try another language: *"Wetin my balance be?"* (Pidgin), *"Montre-moi mes portefeuilles"* (French).
+Open Telegram and message your bot:
 
-Wallets survive restarts (encrypted in `WALLET_STORE_PATH`, default `.data/wallets.json`).
+```
+"create me a wallet"
+```
 
-## Enabling 0G Storage persistence (optional)
+The bot will create a wallet, show you the address and private key, and ask you to name it. That's it — you're set.
 
-Set `OG_STORAGE_ENABLED=true` and provide `OG_STREAM_ID` and `OG_FLOW_CONTRACT` (from the
-0G Storage docs for Galileo). Encrypted records are then mirrored to 0G Storage KV; the
-local store remains the fast/durable fallback if a 0G call fails.
+---
 
-## Project structure
+## Configuration Reference
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | ✅ | — | Bot token from [@BotFather](https://t.me/BotFather) |
+| `OPERATOR_PRIVATE_KEY` | ✅ | — | 32-byte hex private key (with or without `0x`) |
+| `WALLET_ENCRYPTION_KEY` | ✅ | — | AES-256-GCM passphrase for key encryption |
+| `OG_COMPUTE_API_KEY` | ✅ | — | API key from [pc.testnet.0g.ai](https://pc.testnet.0g.ai) |
+| `OG_RPC` | ❌ | `https://evmrpc-testnet.0g.ai` | 0G chain RPC endpoint |
+| `OG_CHAIN_ID` | ❌ | `16602` | 0G Galileo chain ID |
+| `OG_COMPUTE_BASE_URL` | ❌ | `https://router-api-testnet.integratenetwork.work/v1` | Compute Router endpoint |
+| `OG_COMPUTE_MODEL` | ❌ | `qwen/qwen2.5-omni-7b` | LLM model for inference |
+| `OG_STORAGE_ENABLED` | ❌ | `false` | Enable 0G Storage KV persistence |
+| `OG_INDEXER_RPC` | ❌ | `https://indexer-storage-testnet-turbo.0g.ai` | Storage indexer RPC |
+| `OG_MEMORY_ENABLED` | ❌ | `true` | Enable F1 permanent memory |
+| `OG_MEMORY_CONTEXT_WINDOW` | ❌ | `10` | Recent messages to inject as LLM context |
+| `OG_MEMORY_SEARCH_LIMIT` | ❌ | `20` | Default search result limit |
+| `OG_MEMORY_MAX_ENTRIES` | ❌ | `1000` | Max entries per user (oldest pruned) |
+| `WALLET_GAS_DRIP` | ❌ | `0` | OG amount to drip to new wallets |
+| `WALLET_STORE_PATH` | ❌ | `.data/wallets.json` | Local encrypted wallet store |
+
+---
+
+## Usage
+
+### Natural Language Examples
+
+| You Say | Bot Does |
+|---|---|
+| *"create me a wallet"* | Generates a new wallet, shows key + address, prompts for name |
+| *"create a wallet called savings"* | Creates a wallet named "savings" |
+| *"what's my balance?"* | Shows OG balance for all wallets |
+| *"show my wallets"* | Lists all wallets with addresses and names |
+| *"show my address"* | Shows wallet picker, then address + QR |
+| *"rename my wallet to main"* | Renames the specified wallet |
+| *"what did I do yesterday?"* | Searches permanent memory for yesterday's activity |
+| *"what's my first wallet?"* | Recalls the earliest wallet creation from memory |
+
+### Quick-Action Buttons
+
+After any response, tap the inline buttons:
+
+```
+[💰 Balance] [📬 Addresses] [➕ Wallet] [❓ Help]
+```
+
+- **💰 Balance** — Check all balances
+- **📬 Addresses** — View wallet addresses
+- **➕ Wallet** — Create a new wallet
+- **❓ Help** — Show help with examples
+
+### Private Key
+
+To view a wallet's private key, ask the bot or use the button. The key is shown with a one-tap hide button for security.
+
+---
+
+## Project Structure
 
 ```
 src/
-  index.ts                 boot: load config, start the bot
-  config.ts                zod-validated environment
-  bot.ts                   grammY bot + command/AI routing
-  og/
-    compute.ts             OpenAI-compatible client for 0G Compute Router
-    chain.ts               ethers provider + operator wallet, balance, gas drip
-    storage.ts             0G Storage KV wrapper (Indexer/Batcher/KvClient)
-  ai/
-    tools.ts               5 tool definitions (create_wallet, list_wallets, get_balance,
-                           get_wallet_address, rename_wallet)
-    systemPrompt.ts        Bot persona, behavioral rules, multilingual directive
-    toolExecutor.ts        Dispatches LLM tool calls to walletService
-    agent.ts               Tool-calling agent loop (max 5 iterations)
-  handlers/
-    walletHandlers.ts      Telegram command handlers (wallet, address, balance, etc.)
-    aiHandler.ts           Natural-language message handler using 0G Compute
-  wallet/
-    crypto.ts              AES-256-GCM encrypt/decrypt
-    crypto.test.ts         Crypto unit test
-    walletStore.ts         Local + 0G-backed encrypted persistence
-    walletService.ts       F4: createWallet / getSigner / getBalanceFor
-  util/qr.ts               Address → QR PNG
+├── index.ts                  # Entry point: load config, start bot
+├── config.ts                 # Zod-validated environment config
+├── bot.ts                    # grammY bot setup + routing
+│
+├── og/
+│   ├── compute.ts            # 0G Compute Router client (OpenAI-compatible)
+│   ├── chain.ts              # ethers v6 provider + operator wallet
+│   ├── storage.ts            # 0G Storage KV wrapper
+│   └── fileStorage.ts        # 0G Storage File Mode (rolling snapshots)
+│
+├── ai/
+│   ├── agent.ts              # Tool-calling agent loop (max 5 iterations)
+│   ├── tools.ts              # Tool definitions (create_wallet, list_wallets, etc.)
+│   ├── toolExecutor.ts       # Dispatches LLM tool calls to walletService
+│   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
+│   └── memory.ts             # F1: permanent memory (0G Storage snapshots)
+│
+├── handlers/
+│   ├── aiHandler.ts          # Natural language handler (AI agent entry point)
+│   └── walletHandlers.ts      # Wallet command handlers + quick-action buttons
+│
+├── wallet/
+│   ├── crypto.ts             # AES-256-GCM encrypt/decrypt
+│   ├── crypto.test.ts        # Crypto unit test
+│   ├── walletStore.ts        # Local + 0G-backed encrypted persistence
+│   ├── walletService.ts      # Wallet generation, balance, rename
+│   └── namingState.ts        # Wallet naming flow state management
+│
+└── util/
+    └── qr.ts                 # Address → QR PNG generator
 ```
+
+---
 
 ## Roadmap
 
 | Feature | Status |
-| --- | --- |
-| **F4** On-Chain Wallet Generator | ✅ done — multiple named wallets per user |
-| **F2** Conversational Wallet (0G Compute LLM + tool-calling) | ✅ done — 5 tools, multilingual, agent loop |
-| **F7** Multi-Language Support | ✅ done (part of F2 system prompt) |
-| **F1** Infinite Wallet Memory (0G Storage) | ⏳ planned |
-| **F3** Verifiable AI Portfolio Advisor | ⏳ planned |
-| **F5** Verifiable AI Receipts | ⏳ planned |
-| **F6** Smart Link / Action Generator | ⏳ planned |
+|---|---|
+| **F4** On-Chain Wallet Generator | ✅ Complete |
+| **F2** Conversational AI Agent | ✅ Complete |
+| **F7** Multi-Language Support | ✅ Complete |
+| **F1** Infinite Memory (0G Storage) | ✅ Complete |
+| **UX** Quick-action buttons, loading states, message splitting | ✅ Complete |
+| **F3** Verifiable AI Portfolio Advisor | ⏳ Planned |
+| **F5** Verifiable AI Receipts | ⏳ Planned |
+| **F6** Smart Link / Action Generator | ⏳ Planned |
 
-## Tech
+---
 
-[grammY](https://grammy.dev) · [ethers v6](https://docs.ethers.org) · [OpenAI SDK](https://www.npmjs.com/package/openai) (v4, for 0G Compute Router) ·
-[`@0gfoundation/0g-storage-ts-sdk`](https://www.npmjs.com/package/@0gfoundation/0g-storage-ts-sdk) ·
-TypeScript · zod · tsx
+## Development
+
+```bash
+# Watch mode (auto-restart on changes)
+npm run dev
+
+# Type-check only
+npm run typecheck
+
+# Run tests
+npm test
+```
+
+### Testing Memory
+
+```bash
+# Memory diagnostic
+npx tsx scripts/test-memory-diagnostic.ts
+
+# Compute connectivity
+npx tsx scripts/test-compute.ts
+```
+
+---
+
+## License
+
+[MIT](LICENSE)
+
+---
+
+<div align="center">
+Built for the 0G ecosystem · <a href="https://0g.ai">0g.ai</a>
+</div>

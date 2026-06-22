@@ -23,6 +23,7 @@ import {
 } from './handlers/walletHandlers';
 import { naming } from './wallet/namingState';
 import { swapState } from './wallet/swapState';
+import { sendState } from './wallet/sendState';
 import { handleAiMessage } from './handlers/aiHandler';
 import { handleSwapConfirm, handleSwapCancel } from './handlers/swapHandlers';
 import {
@@ -35,6 +36,15 @@ import {
   stageSwap,
   parseSwapText,
 } from './handlers/swapUiHandlers';
+import { handleSendConfirm, handleSendCancel } from './handlers/sendHandlers';
+import {
+  handleSendButton,
+  handleSendAddressReply,
+  handleSendAmountReply,
+  handleSendCommand,
+  stageSend,
+  parseSendText,
+} from './handlers/sendUiHandlers';
 
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -65,6 +75,24 @@ export function buildBot(): Bot {
     await handleSwapAmountReply(ctx, ctx.message.text);
   });
 
+  // 1c) Send-state interceptor: when a send is awaiting an address or amount
+  //     (from the dashboard Send button or a bare /send), capture the next plain
+  //     message. Commands fall through.
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    const draft = userId ? sendState.get(userId) : undefined;
+    if (!userId || !draft) return next();
+    if (ctx.message.text.startsWith('/')) {
+      sendState.clear(userId);
+      return next();
+    }
+    if (draft.stage === 'address') {
+      await handleSendAddressReply(ctx, ctx.message.text);
+    } else {
+      await handleSendAmountReply(ctx, ctx.message.text);
+    }
+  });
+
   // 2) Commands
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
@@ -76,6 +104,7 @@ export function buildBot(): Bot {
   bot.command('wrap', handleWrapCommand);
   bot.command('unwrap', handleUnwrapCommand);
   bot.command('swap', handleSwapCommand);
+  bot.command('send', handleSendCommand);
 
   // 3) Home-dashboard button taps
   bot.callbackQuery(/^sel:(.+)$/, handleSelectWallet);
@@ -88,6 +117,7 @@ export function buildBot(): Bot {
   bot.callbackQuery('home:help', handleFaq);
   bot.callbackQuery('home:swap', handleSwapMenu);
   bot.callbackQuery(/^swr:([A-Z]+)_([A-Z]+)$/, handleSwapNew);
+  bot.callbackQuery('home:send', handleSendButton);
 
   // 4) Wallet-view / key-reveal button taps
   bot.callbackQuery(/^wallet:(.+)$/, handleWalletCallback);
@@ -98,7 +128,11 @@ export function buildBot(): Bot {
   bot.callbackQuery('swap:confirm', handleSwapConfirm);
   bot.callbackQuery('swap:cancel', handleSwapCancel);
 
-  // 4c) Deterministic swap-phrase matcher: clear "wrap/unwrap/swap <amount> …"
+  // 4c) Send confirmation
+  bot.callbackQuery('send:confirm', handleSendConfirm);
+  bot.callbackQuery('send:cancel', handleSendCancel);
+
+  // 4d) Deterministic swap-phrase matcher: clear "wrap/unwrap/swap <amount> …"
   //     messages stage a swap directly (always shows Confirm), bypassing the
   //     flaky 7B tool-calling. Anything fuzzy falls through to the AI agent.
   bot.on('message:text', async (ctx, next) => {
@@ -106,6 +140,15 @@ export function buildBot(): Bot {
     const parsed = userId ? parseSwapText(ctx.message.text) : null;
     if (!userId || !parsed) return next();
     await stageSwap(ctx, userId, parsed);
+  });
+
+  // 4e) Deterministic send-phrase matcher: "send X OG to 0xADDR" stages a send
+  //     directly. Anything else falls through to the AI agent.
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    const parsed = userId ? parseSendText(ctx.message.text) : null;
+    if (!userId || !parsed) return next();
+    await stageSend(ctx, userId, parsed);
   });
 
   // 5) AI agent (F2) — natural-language understanding via 0G Compute.

@@ -1,7 +1,6 @@
 import { InlineKeyboard, type Context } from 'grammy';
 import { runAgent } from '../ai/agent';
 import { recordMessage, getRecent, search } from '../ai/memory';
-import { actionKeyboard } from './walletHandlers';
 import type { ChatMessage } from '../og/compute';
 import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai/memory';
 
@@ -255,16 +254,11 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
       ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
     }
 
-    // ── Send the reply with quick-action buttons ──
-    // Split long messages and send each part
+    // ── Send the reply ──
+    // Split long messages and send each part (plain text — the dashboard lives in /start).
     const parts = splitLongMessage(reply);
-    for (let i = 0; i < parts.length; i++) {
-      // Only attach action keyboard to the LAST part
-      const kb = i === parts.length - 1 ? actionKeyboard() : undefined;
-      await ctx.reply(parts[i], {
-        parse_mode: 'Markdown',
-        reply_markup: kb,
-      });
+    for (const part of parts) {
+      await ctx.reply(part, { parse_mode: 'Markdown' });
     }
 
     // F1: persist assistant reply to 0G Storage (best-effort, non-blocking).
@@ -290,7 +284,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
         'If the problem persists, use /help to see commands that work without AI.',
       ].join('\n'),
       {
-        reply_markup: new InlineKeyboard().text('❓ Help', 'action:help'),
+        reply_markup: new InlineKeyboard().text('❓ Help', 'home:help'),
       },
     );
   }

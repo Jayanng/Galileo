@@ -1,12 +1,25 @@
 import { Bot } from 'grammy';
 import { config } from './config';
 import {
+  handleStart,
+  handleHelp,
   handleCreateWallet,
-  handleNameReply,
   handleListAddresses,
   handleWalletCallback,
   handleBalance,
-  handleHelp,
+  handlePrivateKeyCommand,
+  handleRevealPrivateKey,
+  handleSavedKey,
+  handleSelectWallet,
+  handleDeposit,
+  handleSettings,
+  handleExport,
+  handleHomeBack,
+  handleNewWallet,
+  handleChangeName,
+  handleFaq,
+  handleNameReply,
+  handleSkip,
 } from './handlers/walletHandlers';
 import { naming } from './wallet/namingState';
 import { handleAiMessage } from './handlers/aiHandler';
@@ -14,12 +27,12 @@ import { handleAiMessage } from './handlers/aiHandler';
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
-  // 1) Naming interceptor: if the user just created a wallet and owes it a name,
-  //    capture their next plain message as that name. All input is natural language.
+  // 1) Naming interceptor: when a wallet is awaiting a name (after the user saved
+  //    their key, or via Settings → Change name), capture their next plain message
+  //    as the name. Commands fall through.
   bot.on('message:text', async (ctx, next) => {
     const userId = ctx.from?.id ? String(ctx.from.id) : null;
     if (!userId || !naming.get(userId)) return next();
-    // If the user sends a slash command while naming, clear the pending name
     if (ctx.message.text.startsWith('/')) {
       naming.clear(userId);
       return next();
@@ -27,26 +40,33 @@ export function buildBot(): Bot {
     await handleNameReply(ctx, ctx.message.text);
   });
 
-  // 2) Pure natural language — all input goes through the AI agent
-  bot.on('message:text', handleAiMessage);
+  // 2) Commands
+  bot.command('start', handleStart);
+  bot.command('help', handleHelp);
+  bot.command('wallet', handleCreateWallet);
+  bot.command('address', handleListAddresses);
+  bot.command('balance', handleBalance);
+  bot.command('privatekey', handlePrivateKeyCommand);
+  bot.command('skip', handleSkip);
 
-  // 3) Inline button callbacks: wallet-picker + quick-action buttons
+  // 3) Home-dashboard button taps
+  bot.callbackQuery(/^sel:(.+)$/, handleSelectWallet);
+  bot.callbackQuery('home:deposit', handleDeposit);
+  bot.callbackQuery('home:settings', handleSettings);
+  bot.callbackQuery('home:export', handleExport);
+  bot.callbackQuery('home:rename', handleChangeName);
+  bot.callbackQuery('home:back', handleHomeBack);
+  bot.callbackQuery('home:new', handleNewWallet);
+  bot.callbackQuery('home:help', handleFaq);
+
+  // 4) Wallet-view / key-reveal button taps
   bot.callbackQuery(/^wallet:(.+)$/, handleWalletCallback);
-  bot.callbackQuery(/^action:/, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const action = ctx.callbackQuery?.data?.replace('action:', '');
-    if (!action) return;
-    switch (action) {
-      case 'balance':
-        return handleBalance(ctx);
-      case 'addresses':
-        return handleListAddresses(ctx);
-      case 'wallet':
-        return handleCreateWallet(ctx);
-      case 'help':
-        return handleHelp(ctx);
-    }
-  });
+  bot.callbackQuery(/^pk:(.+)$/, handleRevealPrivateKey);
+  bot.callbackQuery(/^saved:(.+)$/, handleSavedKey);
+
+  // 5) AI agent (F2) — natural-language understanding via 0G Compute.
+  //    Runs last so /commands, naming, and button callbacks take precedence.
+  bot.on('message:text', handleAiMessage);
 
   bot.catch((err) => {
     console.error('[bot] error while handling update', err.error);

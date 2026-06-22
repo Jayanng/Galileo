@@ -1,6 +1,6 @@
-// Tracks which freshly created wallet (per user) is awaiting a name.
-// In-memory and per-process: a restart mid-naming simply leaves the default name,
-// which the user can change later.
+// Tracks which wallet (per user) is awaiting a name. Set right after the user
+// taps "I've saved my private key", and by Settings → Change name. In-memory and
+// per-process: a restart mid-naming just leaves the wallet's current name.
 const pending = new Map<string, string>();
 
 export const naming = {

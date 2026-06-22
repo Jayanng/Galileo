@@ -15,6 +15,14 @@ export interface WalletBalance extends WalletInfo {
   balance: bigint;
 }
 
+export interface WalletSecrets {
+  id: string;
+  name: string;
+  address: string;
+  privateKey: string;
+  mnemonic: string | null;
+}
+
 function toInfo(rec: WalletRecord): WalletInfo {
   return { id: rec.id, name: rec.name, address: rec.address, createdAt: rec.createdAt };
 }
@@ -22,7 +30,8 @@ function toInfo(rec: WalletRecord): WalletInfo {
 /**
  * F4 — On-Chain Wallet Generator (multi-wallet).
  * Always creates a NEW wallet for the user. Default name is "Wallet N" (next index);
- * the caller can rename it afterwards. Private key is encrypted before it's stored.
+ * the caller can rename it afterwards. The private key and seed phrase are encrypted
+ * before they're stored.
  */
 export async function createWallet(userId: string, name?: string): Promise<WalletInfo> {
   const count = (await walletStore.list(userId)).length;
@@ -32,6 +41,11 @@ export async function createWallet(userId: string, name?: string): Promise<Walle
     name: name?.trim() || `Wallet ${count + 1}`,
     address: wallet.address,
     enc: encrypt(wallet.privateKey, config.WALLET_ENCRYPTION_KEY),
+    // createRandom() yields a mnemonic; persist it (encrypted) so the owner can
+    // back up the seed phrase later via /privatekey.
+    ...(wallet.mnemonic
+      ? { encMnemonic: encrypt(wallet.mnemonic.phrase, config.WALLET_ENCRYPTION_KEY) }
+      : {}),
     createdAt: Date.now(),
   };
   await walletStore.add(userId, rec);
@@ -65,6 +79,25 @@ export async function getSigner(userId: string, walletId: string): Promise<Walle
   const rec = await walletStore.get(userId, walletId);
   if (!rec) return null;
   return new Wallet(decrypt(rec.enc, config.WALLET_ENCRYPTION_KEY), provider);
+}
+
+/**
+ * Decrypts a wallet's private key and (if stored) seed phrase for its owner.
+ * Used ONLY by the explicit /privatekey reveal flow — never exposed as an AI tool.
+ */
+export async function getWalletSecrets(
+  userId: string,
+  walletId: string,
+): Promise<WalletSecrets | null> {
+  const rec = await walletStore.get(userId, walletId);
+  if (!rec) return null;
+  return {
+    id: rec.id,
+    name: rec.name,
+    address: rec.address,
+    privateKey: decrypt(rec.enc, config.WALLET_ENCRYPTION_KEY),
+    mnemonic: rec.encMnemonic ? decrypt(rec.encMnemonic, config.WALLET_ENCRYPTION_KEY) : null,
+  };
 }
 
 export async function getWalletBalance(userId: string, walletId: string): Promise<bigint | null> {

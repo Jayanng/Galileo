@@ -9,6 +9,8 @@ export interface WalletRecord {
   name: string;
   address: string;
   enc: EncryptedBlob;
+  /** Encrypted BIP-39 seed phrase. Absent on wallets created before seed storage. */
+  encMnemonic?: EncryptedBlob;
   createdAt: number;
 }
 

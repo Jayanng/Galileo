@@ -170,8 +170,8 @@ function splitLongMessage(text: string): string[] {
  * the AI agent (which calls 0G Compute), and the agent's reply is sent
  * back to the user with quick-action buttons and progressive loading states.
  *
- * IMPORTANT: This handler must be registered AFTER the `naming` interceptor
- * (so wallet-naming flow takes precedence) and AFTER all /commands.
+ * IMPORTANT: This handler must be registered AFTER all /commands and inline-button
+ * callback handlers, so they take precedence over free-text AI routing.
  */
 export async function handleAiMessage(ctx: Context): Promise<void> {
   const userId = ctx.from?.id ? String(ctx.from.id) : null;

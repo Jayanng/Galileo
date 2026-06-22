@@ -12,15 +12,18 @@ wallet whose memory, inference, and execution all live on 0G.
 
 - A Telegram bot that boots against the **0G Galileo testnet**.
 - **Wallet generation (F4):** each Telegram user can create **multiple named wallets** on
-  demand. After creating one, the bot asks you to name it. Every private key is encrypted at
-  rest (AES-256-GCM) and persisted keyed by the user.
+  demand via the `/start` dashboard. On creation the bot reveals the wallet's **private key**
+  (+ address & QR) behind an "I've saved my private key" button that deletes the message when
+  tapped, then prompts you to name the wallet. Keys are encrypted at rest (AES-256-GCM) and
+  persisted keyed by the user. (The seed phrase is also stored encrypted but not shown.)
 - **Conversational agent (F2):** natural-language understanding via **0G Compute** (decentralized,
   TEE-backed inference). The agent can create wallets, list wallets, check balances, get wallet
   addresses, and rename wallets — all by understanding plain English instructions.
 - **Multilingual (F7):** the agent auto-detects the user's language and responds in kind —
   English, Pidgin English, Yoruba, Igbo, Hausa, French, Spanish, Indonesian, Chinese, Arabic.
-- Commands: `/start`, `/help`, `/wallet` (create + name), `/address` (inline-button picker
-  of your wallets), `/balance` (balances across all wallets), `/skip`.
+- Commands: `/start` (wallet dashboard), `/help`, `/wallet` (create + reveal key), `/address`
+  (inline-button picker of your wallets), `/balance` (balances across all wallets),
+  `/privatekey` (reveal a selected wallet's key), `/skip` (keep the default name).
 - Optional persistence of encrypted keys to **0G Storage KV** (off by default; local
   encrypted store is the default and fallback).
 
@@ -81,10 +84,12 @@ npm test           # crypto round-trip unit test
 
 Then DM your bot:
 
-1. `/start` → welcome.
+1. `/start` → your wallet **dashboard**: shows your active wallet's balance, a wallet
+   selector (✅ marks the active one), plus **Deposit** (address + QR) and **Settings → Export
+   private key**. Tap a wallet to make it active.
 2. Try natural language: *"Create me a wallet called savings"*, *"Show my wallets"*,
    *"What's my balance?"*, *"Rename my wallet to main"*.
-3. Commands still work: `/wallet`, `/address`, `/balance`, `/skip`.
+3. Commands still work: `/wallet`, `/address`, `/balance`, `/privatekey`.
 4. Try another language: *"Wetin my balance be?"* (Pidgin), *"Montre-moi mes portefeuilles"* (French).
 
 Wallets survive restarts (encrypted in `WALLET_STORE_PATH`, default `.data/wallets.json`).

@@ -2,6 +2,7 @@ import { chat, type ChatMessage } from '../og/compute';
 import { toolDefinitions } from './tools';
 import { buildSystemPrompt } from './systemPrompt';
 import { executeTool } from './toolExecutor';
+import { recordToolCall } from './memory';
 
 /**
  * Maximum number of LLM round-trips per user message.
@@ -29,7 +30,8 @@ export interface AgentRunResult {
  * @param userId              Telegram user ID (string)
  * @param userMessage         The user's new message text
  * @param conversationHistory Prior messages in this conversation (NOT including system prompt)
- * @param extraContext        Optional retrieved context from 0G Storage (for F1 memory later)
+ * @param extraContext        Optional retrieved context from 0G Storage (built into system prompt)
+ * @param memoryContext       Optional recent memory entries (injected as a separate system message)
  * @returns                   AgentRunResult with the final reply and updated history
  */
 export async function runAgent(
@@ -37,6 +39,7 @@ export async function runAgent(
   userMessage: string,
   conversationHistory: ChatMessage[] = [],
   extraContext?: string,
+  memoryContext?: string,
 ): Promise<AgentRunResult> {
   const systemMessage: ChatMessage = {
     role: 'system',
@@ -45,6 +48,14 @@ export async function runAgent(
 
   const messages: ChatMessage[] = [
     systemMessage,
+    ...(memoryContext
+      ? [
+          {
+            role: 'system' as const,
+            content: `--- RECENT USER ACTIVITY (from your permanent memory on 0G Storage) ---\nThe following are this user's recent interactions. If the user asks about past activity, USE THIS DATA to answer — do not say you have no record.\n\n${memoryContext}\n--- END RECENT ACTIVITY ---`,
+          },
+        ]
+      : []),
     ...conversationHistory,
     { role: 'user', content: userMessage },
   ];
@@ -74,6 +85,9 @@ export async function runAgent(
 
         console.log(`[agent] tool call: ${toolName}(${JSON.stringify(parsedArgs)})`);
         const result = await executeTool(userId, toolName, parsedArgs);
+
+        // F1: persist tool call to 0G Storage (best-effort, never throws)
+        await recordToolCall(userId, toolName, parsedArgs, result);
 
         messages.push({
           role: 'tool',

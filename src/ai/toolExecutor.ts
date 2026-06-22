@@ -7,6 +7,7 @@ import {
   renameWallet,
 } from '../wallet/walletService';
 import { formatOG } from '../og/chain';
+import { search } from './memory';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -44,7 +45,11 @@ export async function executeTool(
             id: wallet.id,
             name: wallet.name,
             address: wallet.address,
-            createdAt: wallet.createdAt,
+            createdAt: new Date(wallet.createdAt).toLocaleString('en-US', {
+              timeZone: 'UTC',
+              dateStyle: 'long',
+              timeStyle: 'short',
+            }) + ' UTC',
           },
         };
       }
@@ -57,7 +62,11 @@ export async function executeTool(
             id: w.id,
             name: w.name,
             address: w.address,
-            createdAt: w.createdAt,
+            createdAt: new Date(w.createdAt).toLocaleString('en-US', {
+              timeZone: 'UTC',
+              dateStyle: 'long',
+              timeStyle: 'short',
+            }) + ' UTC',
           })),
         };
       }
@@ -111,6 +120,59 @@ export async function executeTool(
         }
         await renameWallet(userId, String(args.walletId), name);
         return { success: true, data: { renamed: true, name } };
+      }
+
+      case 'search_history': {
+        const query = typeof args.query === 'string' ? args.query : undefined;
+        const timeRange = typeof args.timeRange === 'string' ? args.timeRange : undefined;
+        const limit = typeof args.limit === 'number' ? args.limit : undefined;
+
+        // Convert timeRange preset to fromTs/toTs
+        let fromTs: number | undefined = typeof args.fromTs === 'number' ? args.fromTs : undefined;
+        let toTs: number | undefined = typeof args.toTs === 'number' ? args.toTs : undefined;
+
+        if (timeRange) {
+          // timeRange takes precedence over fromTs/toTs
+          const now = Date.now();
+          switch (timeRange) {
+            case 'today': {
+              // Midnight UTC today
+              const d = new Date();
+              fromTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+              toTs = now;
+              break;
+            }
+            case 'yesterday':
+              fromTs = now - 86400000;
+              toTs = now;
+              break;
+            case 'last7days':
+              fromTs = now - 7 * 86400000;
+              toTs = now;
+              break;
+            case 'last30days':
+              fromTs = now - 30 * 86400000;
+              toTs = now;
+              break;
+            case 'all':
+              fromTs = undefined;
+              toTs = undefined;
+              break;
+            default:
+              // unknown timeRange, ignore
+              break;
+          }
+        }
+
+        const results = await search(userId, query, fromTs, toTs, limit);
+        console.log(`[toolExecutor] search_history query="${query ?? ''}" timeRange="${timeRange ?? ''}" results=${results.length}`);
+        return {
+          success: true,
+          data: {
+            count: results.length,
+            results,
+          },
+        };
       }
 
       default:

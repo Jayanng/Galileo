@@ -17,35 +17,50 @@ function userIdOf(ctx: Context): string | null {
 }
 
 const NAME_MAX = 32;
-const NO_WALLETS = "You don't have any wallets yet. Send /wallet to create one.";
+const NO_WALLETS = "You don't have any wallets yet. Just tell me you want to create one, like *\"create me a wallet\"*.";
 
-export async function handleStart(ctx: Context): Promise<void> {
-  await ctx.reply(
-    [
-      '👋 *0G Memory Wallet*',
-      '',
-      'An AI-native wallet on the 0G stack. You can hold multiple named wallets:',
-      '',
-      '• `/wallet` — create a new wallet (then name it)',
-      '• `/address` — pick one of your wallets to view',
-      '• `/balance` — balances across all your wallets',
-      '',
-      'You can also just say _"create me a wallet"_.',
-    ].join('\n'),
-    { parse_mode: 'Markdown' },
-  );
+/**
+ * Quick-action keyboard: shown after most interactions so users can tap
+ * instead of typing. All core actions remain accessible via natural language.
+ */
+export function actionKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('💰 Balance', 'action:balance')
+    .text('📬 Addresses', 'action:addresses')
+    .text('➕ Wallet', 'action:wallet')
+    .row()
+    .text('❓ Help', 'action:help');
 }
+
 
 export async function handleHelp(ctx: Context): Promise<void> {
   await ctx.reply(
     [
-      'Commands:',
-      '/wallet — create a new wallet, then name it',
-      '/address — choose a wallet to view (address + QR)',
-      '/balance — balances of all your wallets',
-      '/skip — keep the default name for a just-created wallet',
-      '/help — this message',
+      '╭── 💬 *Natural Language* ──────────╮',
+      '│                                   │',
+      '│ I work with plain English. Just   │',
+      '│ tell me what you want, like:      │',
+      '│                                   │',
+      '│ 💰 "check my balance"             │',
+      '│ ➕ "create me a wallet"           │',
+      '│ 📬 "show my wallet address"       │',
+      '│ 🔍 "what did I do yesterday?"     │',
+      '│ 🏷️ "rename my savings wallet"     │',
+      '│ ❓ "what can you do?"             │',
+      '╰───────────────────────────────────╯',
+      '',
+      '╭── 🔗 *About* ─────────────────────╮',
+      '│                                   │',
+      '│ Chain: *0G Galileo testnet*       │',
+      '│ Token: *OG*                       │',
+      '│ Memory: *Permanent* (0G Storage)  │',
+      '│ AI: *Decentralized* (0G Compute)  │',
+      '╰───────────────────────────────────╯',
     ].join('\n'),
+    {
+      parse_mode: 'Markdown',
+      reply_markup: actionKeyboard(),
+    },
   );
 }
 
@@ -64,7 +79,7 @@ export async function handleCreateWallet(ctx: Context): Promise<void> {
     '',
     `\`${wallet.address}\``,
     '',
-    'What would you like to name it? Send a name, or /skip to keep the default.',
+    'What would you like to name it? Just send me the name, or type "skip" to keep the default.',
   ].join('\n');
   await ctx.replyWithPhoto(new InputFile(png, 'wallet.png'), { caption, parse_mode: 'Markdown' });
 }
@@ -77,7 +92,7 @@ export async function handleNameReply(ctx: Context, text: string): Promise<void>
 
   const name = text.trim().slice(0, NAME_MAX);
   if (!name) {
-    await ctx.reply('That name is empty — send a short name, or /skip.');
+    await ctx.reply('That name is empty — send a short name, or type "skip" to keep the default.');
     return;
   }
   await renameWallet(userId, walletId, name);
@@ -90,20 +105,6 @@ export async function handleNameReply(ctx: Context, text: string): Promise<void>
   const png = await addressQr(wallet.address);
   await ctx.replyWithPhoto(new InputFile(png, 'wallet.png'), {
     caption: `Saved as *${wallet.name}* ✅\n\n\`${wallet.address}\``,
-    parse_mode: 'Markdown',
-  });
-}
-
-export async function handleSkip(ctx: Context): Promise<void> {
-  const userId = userIdOf(ctx);
-  const walletId = userId ? naming.get(userId) : undefined;
-  if (!userId || !walletId) {
-    await ctx.reply('Nothing to skip.');
-    return;
-  }
-  naming.clear(userId);
-  const wallet = await getWallet(userId, walletId);
-  await ctx.reply(`Kept the default name${wallet ? ` *${wallet.name}*` : ''}. ✅`, {
     parse_mode: 'Markdown',
   });
 }

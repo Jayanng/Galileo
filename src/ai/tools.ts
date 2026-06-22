@@ -19,7 +19,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'create_wallet',
       description:
-        "Create a new wallet for the user on 0G Chain. The user can have multiple named wallets. Returns the new wallet's id, address, name, and createdAt timestamp.",
+        "Create a new wallet for the user on 0G Chain. The user can have multiple named wallets. Returns the new wallet's id, address, name, and createdAt (a pre-formatted UTC date string like \"June 21, 2026 at 7:04 PM UTC\" — use this verbatim when displaying the creation date).",
       parameters: {
         type: 'object',
         properties: {
@@ -38,7 +38,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'list_wallets',
       description:
-        "List all of the user's wallets. Returns an array of { id, name, address, createdAt }.",
+        "List all of the user's wallets. Returns an array of { id, name, address, createdAt (a pre-formatted UTC date string like \"June 21, 2026 at 7:04 PM UTC\" — use this verbatim when displaying the creation date) }.",
       parameters: {
         type: 'object',
         properties: {},
@@ -102,6 +102,45 @@ export const toolDefinitions: ChatTool[] = [
           },
         },
         required: ['walletId', 'name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_history',
+      description:
+        "Search the user's permanent memory on 0G Storage for past interactions. Use this whenever the user asks about past activity (e.g., 'what did I do today?', 'what did I do yesterday?', 'when did I create my savings wallet?', 'what did I ask you last week?', 'what did I do in the last hour?'). Supports free-text search and convenient timeRange presets.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description:
+              'Optional free-text to search for (case-insensitive substring match against message content). E.g., "savings", "create", "balance".',
+          },
+          timeRange: {
+            type: 'string',
+            description:
+              'Optional convenience preset for common time ranges. Instead of computing fromTs/toTs yourself, use one of: "today" (since midnight UTC today), "yesterday" (previous 24 hours), "last7days" (7 days ago to now), "last30days" (30 days ago to now), "all" (no time filter). If timeRange is provided, fromTs/toTs are ignored.',
+          },
+          fromTs: {
+            type: 'number',
+            description:
+              'Optional Unix-ms timestamp lower bound (inclusive). Use this UNLESS you are using the timeRange parameter. E.g., Date.now() - 86400000 for "last 24 hours".',
+          },
+          toTs: {
+            type: 'number',
+            description:
+              'Optional Unix-ms timestamp upper bound (inclusive). Use this UNLESS you are using the timeRange parameter. E.g., Date.now() for "up to now".',
+          },
+          limit: {
+            type: 'number',
+            description:
+              'Max number of results to return. Defaults to 20.',
+          },
+        },
+        required: [],
       },
     },
   },

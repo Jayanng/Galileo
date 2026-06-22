@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import { z } from 'zod';
 
 const truthy = new Set(['1', 'true', 'yes', 'on']);
@@ -47,6 +48,19 @@ const schema = z.object({
     .url()
     .default('https://router-api-testnet.integratenetwork.work/v1'),
   OG_COMPUTE_MODEL: z.string().default('qwen/qwen2.5-omni-7b'),
+
+  // F1: Infinite Wallet Memory (0G Storage KV)
+  OG_MEMORY_ENABLED: boolEnv(true),
+  OG_MEMORY_CONTEXT_WINDOW: z.coerce.number().int().positive().default(10),
+  OG_MEMORY_SEARCH_LIMIT: z.coerce.number().int().positive().default(20),
+
+  // F1 Compaction: max entries per user before oldest are pruned.
+  // Each entry is ~200-500 bytes, so 1000 entries ≈ 200-500 KB per user.
+  // Set to 0 to disable compaction (not recommended — unbounded growth).
+  OG_MEMORY_MAX_ENTRIES: z.coerce.number().int().min(0).default(1000),
+
+  // F1 File Mode: local cache mapping userId → latest 0G Storage rootHash
+  OG_STORAGE_INDEX_PATH: z.string().default('.data/root-index.json'),
 });
 
 export type AppConfig = z.infer<typeof schema>;
@@ -63,13 +77,14 @@ function load(): AppConfig {
     );
   }
   const cfg = parsed.data;
-  if (cfg.OG_STORAGE_ENABLED && (!cfg.OG_STREAM_ID || !cfg.OG_FLOW_CONTRACT)) {
+  if (cfg.OG_STORAGE_ENABLED && !cfg.OG_STREAM_ID) {
     throw new Error(
-      'OG_STORAGE_ENABLED=true requires OG_STREAM_ID and OG_FLOW_CONTRACT to be set ' +
-        '(see the 0G Storage docs for the Galileo flow-contract address and your stream id).',
+      'OG_STORAGE_ENABLED=true requires OG_STREAM_ID to be set ' +
+        '(see the 0G Storage docs — KV wallet storage needs a stream id).',
     );
   }
   return cfg;
 }
 
 export const config = load();
+

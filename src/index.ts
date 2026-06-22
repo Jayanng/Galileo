@@ -10,12 +10,25 @@ async function main(): Promise<void> {
   console.log(`[startup] operator wallet ${operatorWallet.address}`);
   console.log(`[startup] 0G Storage persistence: ${config.OG_STORAGE_ENABLED ? 'on' : 'off (local store)'}`);
 
-  process.once('SIGINT', () => void bot.stop());
-  process.once('SIGTERM', () => void bot.stop());
+  // Graceful shutdown: Fly sends SIGTERM on deploy/restart. Stop polling and exit cleanly
+  // so the rejection from bot.start() isn't reported as a fatal crash.
+  let stopping = false;
+  const shutdown = (signal: string): void => {
+    stopping = true;
+    console.log(`[shutdown] ${signal} received, stopping bot...`);
+    void bot.stop();
+  };
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 
-  await bot.start({
-    onStart: (info) => console.log(`[startup] bot @${info.username} is running. Press Ctrl+C to stop.`),
-  });
+  try {
+    await bot.start({
+      onStart: (info) => console.log(`[startup] bot @${info.username} is running. Press Ctrl+C to stop.`),
+    });
+  } catch (err) {
+    if (!stopping) throw err; // a genuine startup/runtime error
+  }
+  console.log('[shutdown] stopped cleanly.');
 }
 
 main().catch((err) => {

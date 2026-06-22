@@ -1,6 +1,7 @@
 import { buildBot } from './bot';
 import { config } from './config';
 import { operatorWallet } from './og/chain';
+import { startHealthServer } from './health';
 
 async function main(): Promise<void> {
   const bot = buildBot();
@@ -10,12 +11,16 @@ async function main(): Promise<void> {
   console.log(`[startup] operator wallet ${operatorWallet.address}`);
   console.log(`[startup] 0G Storage persistence: ${config.OG_STORAGE_ENABLED ? 'on' : 'off (local store)'}`);
 
+  // Health endpoint for uptime monitors (UptimeRobot) and cron pingers (cron-job.org).
+  const healthServer = startHealthServer(Number(process.env.PORT) || 8080);
+
   // Graceful shutdown: Fly sends SIGTERM on deploy/restart. Stop polling and exit cleanly
   // so the rejection from bot.start() isn't reported as a fatal crash.
   let stopping = false;
   const shutdown = (signal: string): void => {
     stopping = true;
     console.log(`[shutdown] ${signal} received, stopping bot...`);
+    healthServer.close();
     void bot.stop();
   };
   process.once('SIGINT', () => shutdown('SIGINT'));

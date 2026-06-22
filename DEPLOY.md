@@ -53,10 +53,23 @@ fly status --app <app-name>    # machine + volume state
 fly secrets list --app <app-name>
 ```
 
+## Uptime monitoring & cron
+
+The app exposes a tiny health endpoint at **`https://<app-name>.fly.dev/health`** →
+`{"status":"ok","uptime":N}` (served by `src/health.ts`, port 8080 via `[http_service]`).
+
+- **UptimeRobot / Better Stack:** add an HTTP(s) monitor on `https://<app-name>.fly.dev/health`,
+  interval 5 min, expecting `200`. You'll get alerted if the bot goes down.
+- **cron-job.org (or any cron pinger):** add a job hitting the same URL on a schedule. This is
+  optional — `auto_stop_machines = false` already keeps the machine running 24/7; the ping just
+  feeds your uptime history and acts as a backup heartbeat.
+
+The endpoint confirms the process is alive (not that Telegram polling is healthy), which is
+enough for down/restart alerts.
+
 ## Notes
 
 - `WALLET_ENCRYPTION_KEY` must stay **stable** — changing it makes existing stored wallets
   undecryptable. Set it once via `fly secrets` and leave it.
 - The volume is tied to one machine/zone; that's expected for a single-instance bot.
-- No health check is configured (it's a worker, not a web service). Fly restarts the machine
-  if the process exits.
+- Fly restarts the machine if the process exits.

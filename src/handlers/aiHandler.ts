@@ -1,6 +1,7 @@
 import { InlineKeyboard, type Context } from 'grammy';
 import { runAgent } from '../ai/agent';
 import { recordMessage, getRecent, search } from '../ai/memory';
+import { pendingSwaps } from '../swap/pendingSwap';
 import type { ChatMessage } from '../og/compute';
 import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai/memory';
 
@@ -255,10 +256,17 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     }
 
     // ── Send the reply ──
-    // Split long messages and send each part (plain text — the dashboard lives in /start).
+    // Split long messages and send each part. If a swap was just prepared, attach a
+    // Confirm/Cancel keyboard to the last part (nothing executes until confirmed).
     const parts = splitLongMessage(reply);
-    for (const part of parts) {
-      await ctx.reply(part, { parse_mode: 'Markdown' });
+    const swapKb = pendingSwaps.get(userId)
+      ? new InlineKeyboard().text('✅ Confirm swap', 'swap:confirm').text('✖ Cancel', 'swap:cancel')
+      : undefined;
+    for (let i = 0; i < parts.length; i++) {
+      await ctx.reply(parts[i], {
+        parse_mode: 'Markdown',
+        reply_markup: i === parts.length - 1 ? swapKb : undefined,
+      });
     }
 
     // F1: persist assistant reply to 0G Storage (best-effort, non-blocking).

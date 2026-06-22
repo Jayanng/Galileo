@@ -8,6 +8,7 @@ import {
 } from '../wallet/walletService';
 import { formatOG } from '../og/chain';
 import { search } from './memory';
+import { prepareSwap } from '../swap/swapService';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -172,6 +173,20 @@ export async function executeTool(
             count: results.length,
             results,
           },
+        };
+      }
+
+      case 'swap': {
+        const res = await prepareSwap(userId, {
+          from: String(args.from ?? ''),
+          to: String(args.to ?? ''),
+          amount: String(args.amount ?? ''),
+          walletId: args.walletId ? String(args.walletId) : undefined,
+        });
+        if (!res.ok) return { success: false, error: res.error };
+        return {
+          success: true,
+          data: { prepared: true, summary: res.summary, note: 'Tell the user to tap Confirm to execute.' },
         };
       }
 

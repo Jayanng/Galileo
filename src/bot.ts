@@ -23,6 +23,7 @@ import {
 } from './handlers/walletHandlers';
 import { naming } from './wallet/namingState';
 import { handleAiMessage } from './handlers/aiHandler';
+import { handleSwapConfirm, handleSwapCancel } from './handlers/swapHandlers';
 
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -63,6 +64,10 @@ export function buildBot(): Bot {
   bot.callbackQuery(/^wallet:(.+)$/, handleWalletCallback);
   bot.callbackQuery(/^pk:(.+)$/, handleRevealPrivateKey);
   bot.callbackQuery(/^saved:(.+)$/, handleSavedKey);
+
+  // 4b) Swap confirmation
+  bot.callbackQuery('swap:confirm', handleSwapConfirm);
+  bot.callbackQuery('swap:cancel', handleSwapCancel);
 
   // 5) AI agent (F2) — natural-language understanding via 0G Compute.
   //    Runs last so /commands, naming, and button callbacks take precedence.

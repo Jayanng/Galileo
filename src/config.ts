@@ -61,6 +61,12 @@ const schema = z.object({
 
   // F1 File Mode: local cache mapping userId → latest 0G Storage rootHash
   OG_STORAGE_INDEX_PATH: z.string().default('.data/root-index.json'),
+
+  // Swaps
+  WOG_ADDRESS: z.string().default(''),
+  DEX_ROUTER_ADDRESS: z.string().default(''),
+  SWAP_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(5000).default(50),
+  SWAP_DEADLINE_SECS: z.coerce.number().int().positive().default(600),
 });
 
 export type AppConfig = z.infer<typeof schema>;

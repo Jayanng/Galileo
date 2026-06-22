@@ -144,6 +144,36 @@ export const toolDefinitions: ChatTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'swap',
+      description:
+        "PREPARE a token swap from the user's active wallet on 0G Galileo. This does NOT execute — it stages the swap and the user must tap a Confirm button afterward. Supports wrap (OG → WOG) and unwrap (WOG → OG) today; token-to-token needs a configured DEX. After calling this, tell the user the swap is prepared and ask them to tap Confirm.",
+      parameters: {
+        type: 'object',
+        properties: {
+          from: {
+            type: 'string',
+            description: 'Input token: "OG" (native), "WOG", or a 0x token contract address.',
+          },
+          to: {
+            type: 'string',
+            description: 'Output token: "OG", "WOG", or a 0x token contract address.',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of the INPUT token, as a decimal string (e.g. "5", "0.25").',
+          },
+          walletId: {
+            type: 'string',
+            description: 'Optional wallet id; defaults to the user’s active wallet.',
+          },
+        },
+        required: ['from', 'to', 'amount'],
+      },
+    },
+  },
 ];
 
 /**

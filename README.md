@@ -126,7 +126,7 @@ Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, Fren
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │ walletService │  │   crypto.ts  │  │    walletStore   │  │
-│  │ (F4 wallet    │  │ AES-256-GCM  │  │  local + 0G KV   │  │
+│  │ (F4 wallet    │  │ AES-256-GCM  │  │  local encrypted  │  │
 │  │  generator)   │  │ encrypt/     │  │  persistence     │  │
 │  │               │  │ decrypt      │  │                  │  │
 │  └──────┬───────┘  └──────────────┘  └──────────────────┘  │
@@ -136,9 +136,9 @@ Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, Fren
 │                   0G blockchain layer                        │
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  chain.ts    │  │  compute.ts  │  │   storage.ts     │  │
-│  │ ethers v6    │  │ OpenAI SDK   │  │ 0G Storage KV    │  │
-│  │ RPC provider │  │ 0G Compute   │  │ Indexer/Batcher  │  │
+│  │  chain.ts    │  │  compute.ts  │  │  fileStorage.ts  │  │
+│  │ ethers v6    │  │ OpenAI SDK   │  │ 0G Storage File  │  │
+│  │ RPC provider │  │ 0G Compute   │  │ Indexer          │  │
 │  └──────────────┘  └──────────────┘  └──────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -165,7 +165,7 @@ Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, Fren
 | **Blockchain** | ethers v6, 0G Galileo testnet |
 | **AI Inference** | 0G Compute Router (OpenAI-compatible) |
 | **AI Model** | Qwen 2.5 Omni 7B |
-| **Storage** | 0G Storage (File Mode + KV) |
+| **Storage** | 0G Storage (File Mode) |
 | **Encryption** | AES-256-GCM |
 | **Validation** | zod |
 | **Dev Tools** | tsx (TypeScript executor), tsd (typecheck) |
@@ -249,7 +249,6 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | `OG_CHAIN_ID` | ❌ | `16602` | 0G Galileo chain ID |
 | `OG_COMPUTE_BASE_URL` | ❌ | `https://router-api-testnet.integratenetwork.work/v1` | Compute Router endpoint |
 | `OG_COMPUTE_MODEL` | ❌ | `qwen/qwen2.5-omni-7b` | LLM model for inference |
-| `OG_STORAGE_ENABLED` | ❌ | `false` | Enable 0G Storage KV persistence |
 | `OG_INDEXER_RPC` | ❌ | `https://indexer-storage-testnet-turbo.0g.ai` | Storage indexer RPC |
 | `OG_MEMORY_ENABLED` | ❌ | `true` | Enable F1 permanent memory |
 | `OG_MEMORY_CONTEXT_WINDOW` | ❌ | `10` | Recent messages to inject as LLM context |
@@ -305,7 +304,7 @@ src/
 ├── og/
 │   ├── compute.ts            # 0G Compute Router client (OpenAI-compatible)
 │   ├── chain.ts              # ethers v6 provider + operator wallet
-│   ├── storage.ts            # 0G Storage KV wrapper
+│   ├── storage.ts            # 0G Storage (legacy KV, not used for memory)
 │   └── fileStorage.ts        # 0G Storage File Mode (rolling snapshots)
 │
 ├── ai/

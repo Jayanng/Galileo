@@ -5,6 +5,7 @@ import {
   getWallet,
   renameWallet,
   getWalletBalance,
+  getWalletAssets,
   getAllBalances,
   getWalletSecrets,
   type WalletInfo,
@@ -57,18 +58,14 @@ async function renderHome(userId: string): Promise<{ text: string; keyboard: Inl
   }
 
   const active = (await resolveActive(userId, wallets))!;
-  let balance: bigint | null = null;
-  try {
-    balance = await getWalletBalance(userId, active.id);
-  } catch {
-    balance = null;
-  }
-  const balanceStr = balance === null ? '—' : formatOG(balance);
+  const assets = await getWalletAssets(active.address);
+  const assetLines = assets.map((a) => `• *${formatOG(a.balance)} ${a.symbol}*`);
 
   const text = [
     ...intro,
     '',
-    `💰 You currently have *${balanceStr} OG* in *${active.name}*.`,
+    `💰 *Assets in ${active.name}*`,
+    ...assetLines,
     '',
     '🔐 Export your wallet via *Settings → Export private key*.',
   ].join('\n');

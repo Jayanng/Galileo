@@ -3,6 +3,7 @@ import { config } from '../config';
 import { encrypt, decrypt } from './crypto';
 import { walletStore, newWalletId, type WalletRecord } from './walletStore';
 import { provider, getBalance, dripGas } from '../og/chain';
+import { tokenBalance } from '../og/erc20';
 
 export interface WalletInfo {
   id: string;
@@ -111,4 +112,43 @@ export async function getAllBalances(userId: string): Promise<WalletBalance[]> {
   return Promise.all(
     wallets.map(async (w) => ({ ...toInfo(w), balance: await getBalance(w.address) })),
   );
+}
+
+export interface AssetBalance {
+  symbol: string;
+  balance: bigint;
+}
+
+/** Configured non-native tokens (WOG, USDC, USDT) that have an address set. */
+function configuredTokens(): { symbol: string; address: string }[] {
+  const list: { symbol: string; address: string }[] = [];
+  if (config.WOG_ADDRESS) list.push({ symbol: 'WOG', address: config.WOG_ADDRESS });
+  if (config.USDC_ADDRESS) list.push({ symbol: 'USDC', address: config.USDC_ADDRESS });
+  if (config.USDT_ADDRESS) list.push({ symbol: 'USDT', address: config.USDT_ADDRESS });
+  return list;
+}
+
+/**
+ * Native OG plus each configured token's balance for a wallet address.
+ * Token reads are best-effort — a failed RPC shows 0 rather than breaking the
+ * dashboard. All demo tokens are 18-decimal (WETH9-clone WOG, mock USDC/USDT),
+ * so callers can format with the same formatOG used for native OG.
+ */
+export async function getWalletAssets(address: string): Promise<AssetBalance[]> {
+  let ogBalance = 0n;
+  try {
+    ogBalance = await getBalance(address);
+  } catch {
+    ogBalance = 0n;
+  }
+  const tokenBalances = await Promise.all(
+    configuredTokens().map(async (t) => {
+      try {
+        return { symbol: t.symbol, balance: await tokenBalance(t.address, address) };
+      } catch {
+        return { symbol: t.symbol, balance: 0n };
+      }
+    }),
+  );
+  return [{ symbol: 'OG', balance: ogBalance }, ...tokenBalances];
 }

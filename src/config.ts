@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
 const truthy = new Set(['1', 'true', 'yes', 'on']);
@@ -59,8 +60,11 @@ const schema = z.object({
   // Set to 0 to disable compaction (not recommended — unbounded growth).
   OG_MEMORY_MAX_ENTRIES: z.coerce.number().int().min(0).default(1000),
 
-  // F1 File Mode: local cache mapping userId → latest 0G Storage rootHash
-  OG_STORAGE_INDEX_PATH: z.string().default('.data/root-index.json'),
+  // F1 File Mode: local cache mapping userId → latest 0G Storage rootHash.
+  // When unset, it is derived to sit BESIDE the wallet store (see load() below),
+  // so it always lands on the same persistent volume — otherwise a restart wipes
+  // the index and all recorded history becomes unfindable on 0G Storage.
+  OG_STORAGE_INDEX_PATH: z.string().default(''),
 
   // Swaps
   WOG_ADDRESS: z.string().default(''),
@@ -86,6 +90,13 @@ function load(): AppConfig {
     );
   }
   const cfg = parsed.data;
+  // F1 memory index must live on the same persistent volume as the wallet store.
+  // If not set explicitly, place it next to WALLET_STORE_PATH (mirrors active.json).
+  // Without this, the default landed on the ephemeral rootfs and every restart/
+  // redeploy wiped the userId → rootHash map, making recorded txs unfindable.
+  if (!cfg.OG_STORAGE_INDEX_PATH) {
+    cfg.OG_STORAGE_INDEX_PATH = join(dirname(cfg.WALLET_STORE_PATH), 'root-index.json');
+  }
   if (cfg.OG_STORAGE_ENABLED && !cfg.OG_STREAM_ID) {
     throw new Error(
       'OG_STORAGE_ENABLED=true requires OG_STREAM_ID to be set ' +

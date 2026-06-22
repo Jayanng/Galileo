@@ -11,6 +11,10 @@ primary_region = "ord"
   PORT = "8080"
   # Persist wallet data on the volume mounted at /data (NOT the ephemeral rootfs).
   WALLET_STORE_PATH = "/data/wallets.json"
+  # F1 memory's userId → 0G Storage rootHash index. MUST live on the volume too —
+  # if it sits on the ephemeral rootfs, every restart/redeploy wipes it and all
+  # recorded transactions become unfindable ("no bot-recorded transactions yet").
+  OG_STORAGE_INDEX_PATH = "/data/root-index.json"
 
 # Public HTTP surface — just the /health endpoint. auto-stop is OFF so the machine
 # stays up 24/7 to keep long-polling Telegram (the proxy must never stop it).

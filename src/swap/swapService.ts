@@ -31,6 +31,32 @@ const isWogToken = (t: string): boolean =>
   t.trim().toUpperCase() === 'WOG' ||
   (isAddress(t) && wogConfigured() && t.toLowerCase() === config.WOG_ADDRESS.toLowerCase());
 
+/** Map a known token symbol to its configured contract address (null if unknown/unset). */
+function symbolToAddress(sym: string): string | null {
+  switch (sym.trim().toUpperCase()) {
+    case 'USDC':
+      return config.USDC_ADDRESS || null;
+    case 'USDT':
+      return config.USDT_ADDRESS || null;
+    default:
+      return null;
+  }
+}
+
+/** Resolve a token symbol to its address; OG/WOG/0x inputs pass through untouched. */
+function resolveTokenInput(t: string): string {
+  return symbolToAddress(t) ?? t.trim();
+}
+
+/** Non-OG/WOG symbols that are swappable right now (a configured token + a live DEX). */
+export function availableDexSymbols(): string[] {
+  if (!dexConfigured()) return [];
+  const out: string[] = [];
+  if (config.USDC_ADDRESS) out.push('USDC');
+  if (config.USDT_ADDRESS) out.push('USDT');
+  return out;
+}
+
 async function resolveWallet(userId: string, walletId?: string): Promise<WalletInfo | null> {
   const wallets = await listWallets(userId);
   if (wallets.length === 0) return null;
@@ -59,8 +85,8 @@ export async function prepareSwap(userId: string, req: SwapRequest): Promise<Pre
   }
   if (amountWei <= 0n) return { ok: false, error: 'Amount must be greater than 0.' };
 
-  const from = req.from.trim();
-  const to = req.to.trim();
+  const from = resolveTokenInput(req.from);
+  const to = resolveTokenInput(req.to);
 
   // OG -> WOG (wrap)
   if (isNative(from) && isWogToken(to)) {

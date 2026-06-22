@@ -2,6 +2,7 @@ import { InlineKeyboard, type Context } from 'grammy';
 import { runAgent } from '../ai/agent';
 import { recordMessage, getRecent, search } from '../ai/memory';
 import { pendingSwaps } from '../swap/pendingSwap';
+import { swapConfirmKeyboard } from './swapUiHandlers';
 import type { ChatMessage } from '../og/compute';
 import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai/memory';
 
@@ -259,9 +260,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     // Split long messages and send each part. If a swap was just prepared, attach a
     // Confirm/Cancel keyboard to the last part (nothing executes until confirmed).
     const parts = splitLongMessage(reply);
-    const swapKb = pendingSwaps.get(userId)
-      ? new InlineKeyboard().text('✅ Confirm swap', 'swap:confirm').text('✖ Cancel', 'swap:cancel')
-      : undefined;
+    const swapKb = pendingSwaps.get(userId) ? swapConfirmKeyboard() : undefined;
     for (let i = 0; i < parts.length; i++) {
       await ctx.reply(parts[i], {
         parse_mode: 'Markdown',

@@ -65,6 +65,9 @@ const schema = z.object({
   // Swaps
   WOG_ADDRESS: z.string().default(''),
   DEX_ROUTER_ADDRESS: z.string().default(''),
+  DEX_FACTORY_ADDRESS: z.string().default(''),
+  USDC_ADDRESS: z.string().default(''),
+  USDT_ADDRESS: z.string().default(''),
   SWAP_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(5000).default(50),
   SWAP_DEADLINE_SECS: z.coerce.number().int().positive().default(600),
 });

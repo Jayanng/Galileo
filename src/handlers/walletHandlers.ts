@@ -82,7 +82,8 @@ async function renderHome(userId: string): Promise<{ text: string; keyboard: Inl
     kb.row();
   }
   kb.text('📥 Deposit', 'home:deposit').text('⚙️ Settings', 'home:settings').row();
-  kb.text('➕ New wallet', 'home:new').text('❓ Help', 'home:help');
+  kb.text('🔄 Swap', 'home:swap').text('➕ New wallet', 'home:new').row();
+  kb.text('❓ Help', 'home:help');
 
   return { text, keyboard: kb };
 }
@@ -115,9 +116,12 @@ export async function handleHelp(ctx: Context): Promise<void> {
       '/address — choose a wallet to view (address + QR)',
       '/balance — balances of all your wallets',
       '/privatekey — reveal a wallet’s private key',
+      '/wrap — wrap OG → WOG (e.g. /wrap 0.1)',
+      '/unwrap — unwrap WOG → OG (e.g. /unwrap 0.1)',
+      '/swap — swap tokens (e.g. /swap 0.1 OG USDC), or open the Swap menu',
       '/help — this message',
       '',
-      'You can also just chat: "create a wallet called savings", "rename Wallet 1 to main", "what’s my balance?"',
+      'You can also just chat: "create a wallet called savings", "wrap 0.1 OG", "what’s my balance?"',
     ].join('\n'),
   );
 }

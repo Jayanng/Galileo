@@ -39,7 +39,7 @@ const schema = z.object({
   OG_STREAM_ID: z.string().default(''),
   OG_FLOW_CONTRACT: z.string().default('0x22E03a6A89B950F1c82ec5e74F8eCa321a105296'),
 
-  // 0G Compute (Router path — OpenAI-compatible)
+  // 0G Compute — official 0g-compute-ts-sdk broker (TEE-verifiable inference)
   OG_COMPUTE_API_KEY: z
     .string()
     .min(1, 'OG_COMPUTE_API_KEY is required (get one at https://pc.testnet.0g.ai)'),
@@ -48,6 +48,20 @@ const schema = z.object({
     .url()
     .default('https://router-api-testnet.integratenetwork.work/v1'),
   OG_COMPUTE_MODEL: z.string().default('qwen/qwen2.5-omni-7b'),
+
+  // When true, skip the SDK broker and call OG_COMPUTE_BASE_URL directly.
+  // No TEE verification is possible in this mode. Keep as a temporary fallback.
+  OG_COMPUTE_FALLBACK: boolEnv(false),
+
+  // Amount of OG to top up the selected provider's inference sub-account at
+  // startup when balance is below this threshold. Units are in OG (not neuron).
+  // The SDK recommends ≥ 1 OG per provider to satisfy its minimum-balance rule.
+  OG_COMPUTE_FUND_AMOUNT: z.string().default('0.05'),
+
+  // Optional explicit provider address. If set, the broker skips discovery and
+  // uses this provider. Must still satisfy serviceType='chatbot' and
+  // verifiability='TeeML' filters.
+  OG_COMPUTE_PROVIDER_ADDRESS: z.string().default(''),
 
   // F1: Infinite Wallet Memory (0G Storage KV)
   OG_MEMORY_ENABLED: boolEnv(true),

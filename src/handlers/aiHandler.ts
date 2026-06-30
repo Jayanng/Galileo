@@ -1,7 +1,8 @@
 import { InlineKeyboard, type Context } from 'grammy';
 import { runAgent } from '../ai/agent';
-import { recordMessage, getRecent, search } from '../ai/memory';
+import { recordMessage, recordProof, getRecent, search } from '../ai/memory';
 import { actionKeyboard } from './walletHandlers';
+import { config } from '../config';
 import type { ChatMessage } from '../og/compute';
 import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai/memory';
 
@@ -131,7 +132,41 @@ function formatSearchEntry(e: SearchEntry): string {
     const tx = e as unknown as StoredTx;
     return `[${ts}] transaction: ${tx.type} ${tx.hash}`;
   }
+  if (e.kind === 'proof') {
+    const p = e as unknown as { chatID: string; providerAddress: string; verified: boolean | null };
+    const status = p.verified === true ? 'verified' : p.verified === false ? 'invalid' : 'pending';
+    return `[${ts}] TEE proof (${status}): chatID=0x${p.chatID.slice(2, 12)}…${p.chatID.slice(-6)} provider=0x${p.providerAddress.slice(2, 8)}…${p.providerAddress.slice(-4)}`;
+  }
   return `[${ts}] unknown entry`;
+}
+
+/**
+ * Build the TEE verification footer line appended to every AI reply.
+ *
+ * Rules (in order of precedence):
+ *   1. OG_COMPUTE_FALLBACK=true → "ℹ️ TEE verification unavailable (fallback mode)"
+ *   2. verified === true  → "✅ Verified in TEE — chatID: `0xfirst10…last6`"
+ *   3. verified === false → "⚠️ TEE signature invalid — chatID: `0xfirst10…last6`"
+ *   4. verified === null  → "🔄 TEE verification pending — chatID: `0xfirst10…last6`"
+ *
+ * Returns an empty string if none of the above apply (shouldn't happen).
+ */
+function buildTeeFooter(opts: {
+  verified: boolean | null;
+  chatID: string | null;
+  providerAddress: string | null;
+}): string {
+  if (config.OG_COMPUTE_FALLBACK) {
+    return '_ℹ️ TEE verification unavailable (fallback mode)_';
+  }
+  if (opts.chatID) {
+    const short = `0x${opts.chatID.slice(2, 12)}…${opts.chatID.slice(-6)}`;
+    if (opts.verified === true) return `_✅ Verified in TEE — chatID: \`${short}\`_`;
+    if (opts.verified === false) return `_⚠️ TEE signature invalid — chatID: \`${short}\`_`;
+    return `_🔄 TEE verification pending — chatID: \`${short}\`_`;
+  }
+  // No chatID at all — verification could not be attempted
+  return '_ℹ️ TEE verification unavailable (no chatID returned)_';
 }
 
 /**
@@ -243,11 +278,17 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     }
     await ctx.replyWithChatAction('typing');
 
-    const { reply, iterations, status } = await runAgent(userId, text, history, undefined, memoryContext);
+    const { reply, iterations, status, verified, chatID, providerAddress } = await runAgent(
+      userId,
+      text,
+      history,
+      undefined,
+      memoryContext,
+    );
 
     // Log for debugging
     console.log(
-      `[ai] user=${userId} iters=${iterations} status=${status} reply_len=${reply.length}`,
+      `[ai] user=${userId} iters=${iterations} status=${status} reply_len=${reply.length} verified=${verified ?? 'null'} chatID=${chatID ?? 'none'}`,
     );
 
     // Delete the loading message before sending the real reply
@@ -255,9 +296,28 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
       ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
     }
 
+    // ── Build the TEE verification footer ──
+    // Every AI reply must carry exactly one footer line. The exact form
+    // depends on whether we are in fallback mode and on the verification
+    // outcome of the final assistant turn.
+    const footer = buildTeeFooter({ verified, chatID, providerAddress });
+    const finalReply = footer ? `${reply}\n\n${footer}` : reply;
+
+    // F1: persist the proof to 0G Storage (best-effort, non-blocking).
+    // Skip when fallback mode — there is no proof to record.
+    if (!config.OG_COMPUTE_FALLBACK) {
+      recordProof(userId, {
+        chatID: chatID ?? '',
+        providerAddress: providerAddress ?? '',
+        verified,
+      }).catch(() => {});
+    }
+
     // ── Send the reply with quick-action buttons ──
-    // Split long messages and send each part
-    const parts = splitLongMessage(reply);
+    // Split long messages and send each part. Footer (if any) was already
+    // appended to the reply before splitting — splitLongMessage preserves
+    // it on the last part naturally because footer is appended to the end.
+    const parts = splitLongMessage(finalReply);
     for (let i = 0; i < parts.length; i++) {
       // Only attach action keyboard to the LAST part
       const kb = i === parts.length - 1 ? actionKeyboard() : undefined;

@@ -46,14 +46,29 @@ export interface StoredTx {
   ts: number;
 }
 
+/**
+ * Cryptographic proof that an AI reply was generated inside a TEE.
+ * `verified === true` means the provider's TEE signer signed the response
+ * and the signature checked out; `false` means it was signed but failed
+ * verification; `null` means verification was not attempted (e.g. fallback
+ * mode or `processResponse` threw).
+ */
+export interface StoredProof {
+  chatID: string;
+  providerAddress: string;
+  verified: boolean | null;
+  ts: number;
+}
+
 export type MemoryEntry =
   | { kind: 'msg'; data: StoredMessage }
   | { kind: 'tool'; data: StoredToolCall }
-  | { kind: 'tx'; data: StoredTx };
+  | { kind: 'tx'; data: StoredTx }
+  | { kind: 'proof'; data: StoredProof };
 
 /** Search result type: flattened entry with a `kind` discriminator. */
-export type SearchEntry = (StoredMessage | StoredToolCall | StoredTx) & {
-  kind: 'msg' | 'tool' | 'tx';
+export type SearchEntry = (StoredMessage | StoredToolCall | StoredTx | StoredProof) & {
+  kind: 'msg' | 'tool' | 'tx' | 'proof';
 };
 
 // ───────────────────────────────────────────────────────────────────────
@@ -199,6 +214,25 @@ export async function recordTx(
 }
 
 /**
+ * Persist a TEE-verification proof for an AI reply.
+ *
+ * Called by `aiHandler` after every final assistant turn. Like the other
+ * record* functions, the 0G Storage write is fire-and-forget — the cache is
+ * already updated synchronously so subsequent reads see the proof.
+ */
+export async function recordProof(
+  userId: string,
+  proof: Omit<StoredProof, 'ts'>,
+): Promise<void> {
+  const history = await loadHistory(userId);
+  history.entries.push({
+    kind: 'proof',
+    data: { ...proof, ts: Date.now() },
+  });
+  saveHistory(userId, history).catch(() => {});
+}
+
+/**
  * Get the N most recent MESSAGE entries for a user.
  *
  * Returns a chronological array (oldest first, newest last), useful for
@@ -213,6 +247,23 @@ export async function getRecent(
     .filter((e): e is MemoryEntry & { kind: 'msg' } => e.kind === 'msg')
     .map((e) => e.data as StoredMessage);
   return msgs.slice(-limit);
+}
+
+/**
+ * Get the most recent TEE-verification proofs for a user, newest first.
+ * Powers the `/proof` command.
+ */
+export async function getRecentProofs(
+  userId: string,
+  limit: number = 10,
+): Promise<StoredProof[]> {
+  const history = await loadHistory(userId);
+  const proofs = history.entries
+    .filter((e): e is MemoryEntry & { kind: 'proof' } => e.kind === 'proof')
+    .map((e) => e.data as StoredProof);
+  // Newest first
+  proofs.sort((a, b) => b.ts - a.ts);
+  return proofs.slice(0, limit);
 }
 
 /**

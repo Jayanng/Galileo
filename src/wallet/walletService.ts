@@ -112,3 +112,10 @@ export async function getAllBalances(userId: string): Promise<WalletBalance[]> {
     wallets.map(async (w) => ({ ...toInfo(w), balance: await getBalance(w.address) })),
   );
 }
+
+export async function deleteWallet(userId: string, walletId: string): Promise<boolean> {
+  const rec = await walletStore.get(userId, walletId);
+  if (!rec) return false;
+  await walletStore.remove(userId, walletId);
+  return true;
+}

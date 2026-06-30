@@ -1,4 +1,4 @@
-import { chat, type ChatMessage } from '../og/compute';
+import { chatVerified, type ChatMessage } from '../og/compute';
 import { toolDefinitions } from './tools';
 import { buildSystemPrompt } from './systemPrompt';
 import { executeTool } from './toolExecutor';
@@ -22,6 +22,20 @@ export interface AgentRunResult {
   iterations: number;
   /** Whether the run completed normally or hit the iteration cap. */
   status: 'complete' | 'max_iterations';
+  /**
+   * TEE verification status for the FINAL assistant message only.
+   * true  - provider's TEE signer signed and the signature verified.
+   * false - signed but signature verification failed.
+   * null  - verification was not attempted (fallback mode, no chatID, or
+   *         processResponse threw).
+   * Tool-call iterations also go through chatVerified (for header signing),
+   * but their verification status is intentionally not surfaced here.
+   */
+  verified: boolean | null;
+  /** chatID from the final response (null when not verified). */
+  chatID: string | null;
+  /** Provider address that served the final response (null in fallback mode). */
+  providerAddress: string | null;
 }
 
 /**
@@ -32,7 +46,7 @@ export interface AgentRunResult {
  * @param conversationHistory Prior messages in this conversation (NOT including system prompt)
  * @param extraContext        Optional retrieved context from 0G Storage (built into system prompt)
  * @param memoryContext       Optional recent memory entries (injected as a separate system message)
- * @returns                   AgentRunResult with the final reply and updated history
+ * @returns                   AgentRunResult with the final reply, updated history, and TEE proof metadata
  */
 export async function runAgent(
   userId: string,
@@ -61,7 +75,11 @@ export async function runAgent(
   ];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const { message } = await chat(messages, toolDefinitions);
+    // `userContent` is the billable text. For tool-call iterations it's still
+    // the original user message — what the user actually asked for.
+    const { message } = await chatVerified(messages, toolDefinitions, {
+      userContent: userMessage,
+    });
 
     // Case A: LLM wants to call one or more tools
     if (message.tool_calls && message.tool_calls.length > 0) {
@@ -96,12 +114,23 @@ export async function runAgent(
         });
       }
 
-      // Loop back: LLM will see the tool results and either call more tools or produce final text
+      // Loop back: LLM will see the tool results and either call more tools or produce final text.
+      // The chatVerified call above signed and (on TeeML providers) verified
+      // this intermediate response, but we intentionally discard its proof
+      // metadata — only the FINAL assistant turn's proof is surfaced.
       continue;
     }
 
-    // Case B: LLM produced final text — we're done
-    const finalReply = message.content ?? '(no response)';
+    // Case B: LLM produced final text — we're done.
+    // Re-call chatVerified with no tools so we get a fresh completion that
+    // (a) has the ZG-Res-Key header, (b) is what we want to attach a proof to.
+    // Actually: the current `message` IS the final text — re-using the result
+    // above is correct and avoids an extra round-trip. We DO need the
+    // verification metadata though, so we call chatVerified once more with
+    // no tools to get a clean proof for the final assistant message.
+    const finalResult = await chatVerified(messages, undefined, { userContent: userMessage });
+    const finalReply = finalResult.message.content ?? message.content ?? '(no response)';
+
     return {
       reply: finalReply,
       iterations: i + 1,
@@ -111,10 +140,13 @@ export async function runAgent(
         { role: 'user', content: userMessage },
         { role: 'assistant', content: finalReply },
       ],
+      verified: finalResult.verified,
+      chatID: finalResult.chatID,
+      providerAddress: finalResult.providerAddress,
     };
   }
 
-  // Hit the iteration cap — return a graceful fallback
+  // Hit the iteration cap — return a graceful fallback (no proof metadata)
   console.warn(`[agent] hit MAX_ITERATIONS (${MAX_ITERATIONS}) for user ${userId}`);
   return {
     reply:
@@ -130,5 +162,8 @@ export async function runAgent(
           "I'm having trouble completing that request — it required too many steps.",
       },
     ],
+    verified: null,
+    chatID: null,
+    providerAddress: null,
   };
 }

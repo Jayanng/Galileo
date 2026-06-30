@@ -10,9 +10,18 @@ import {
 } from './handlers/walletHandlers';
 import { naming } from './wallet/namingState';
 import { handleAiMessage } from './handlers/aiHandler';
+import { handleProof } from './handlers/proofHandler';
+import { handlePortfolio, handlePrice } from './handlers/portfolioHandlers';
 
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+
+  // 0) Slash commands. Registered before the naming interceptor so they
+  //    take precedence over plain text and never trigger name-capture.
+  bot.command('proof', handleProof);
+  bot.command('help', handleHelp);
+  bot.command('portfolio', handlePortfolio);
+  bot.command('price', handlePrice);
 
   // 1) Naming interceptor: if the user just created a wallet and owes it a name,
   //    capture their next plain message as that name. All input is natural language.

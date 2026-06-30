@@ -19,6 +19,7 @@ export interface WalletStore {
   get(userId: string, walletId: string): Promise<WalletRecord | null>;
   add(userId: string, rec: WalletRecord): Promise<void>;
   rename(userId: string, walletId: string, name: string): Promise<void>;
+  remove(userId: string, walletId: string): Promise<void>;
 }
 
 export function newWalletId(): string {
@@ -82,6 +83,13 @@ class LocalWalletStore implements WalletStore {
     all[userId] = wallets;
     await this.writeAll(all);
   }
+
+  async remove(userId: string, walletId: string): Promise<void> {
+    const all = await this.readAll();
+    const wallets = (all[userId] ?? []).filter((w) => w.id !== walletId);
+    all[userId] = wallets;
+    await this.writeAll(all);
+  }
 }
 
 /**
@@ -137,6 +145,11 @@ class OgKvWalletStore implements WalletStore {
 
   async rename(userId: string, walletId: string, name: string): Promise<void> {
     await this.local.rename(userId, walletId, name);
+    await this.push(userId);
+  }
+
+  async remove(userId: string, walletId: string): Promise<void> {
+    await this.local.remove(userId, walletId);
     await this.push(userId);
   }
 }

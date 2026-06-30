@@ -22,8 +22,8 @@
 | Layer | Technology |
 |---|---|
 | **Chain** | 0G Galileo testnet (Chain ID 16602) |
-| **Compute** | 0G Compute Router (decentralized, TEE-backed LLM inference) |
-| **Storage** | 0G Storage (permanent, immutable memory) |
+| **Compute** | 0G Compute Network SDK (TEE-verifiable LLM inference) |
+| **Storage** | 0G Storage (permanent, immutable memory + verification proofs) |
 | **AI Model** | Qwen 2.5 Omni 7B (via 0G Compute) |
 
 Users can create wallets, check balances, view addresses, rename wallets, and recall past activity — all by typing plain English (or Pidgin, Yoruba, French, and 7+ other languages).
@@ -75,6 +75,16 @@ Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, Fren
 - Keys revealed only via explicit `/privatekey` command
 - Operator wallet handles gas and storage writes
 - Per-user wallets are independently generated
+
+### 🔐 TEE-Verifiable Inference
+
+Every AI reply carries a verification footer:
+
+```
+✅ Verified in TEE — chatID: `0xabcd123456…ef5678`
+```
+
+The 0G Compute Network SDK signs each request and verifies the provider's TEE-signed response. Verified chat IDs are persisted to 0G Storage alongside your conversation history — send `/proof` to see the last 10.
 
 ### ⚡ Progressive UX
 
@@ -247,8 +257,11 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | `OG_COMPUTE_API_KEY` | ✅ | — | API key from [pc.testnet.0g.ai](https://pc.testnet.0g.ai) |
 | `OG_RPC` | ❌ | `https://evmrpc-testnet.0g.ai` | 0G chain RPC endpoint |
 | `OG_CHAIN_ID` | ❌ | `16602` | 0G Galileo chain ID |
-| `OG_COMPUTE_BASE_URL` | ❌ | `https://router-api-testnet.integratenetwork.work/v1` | Compute Router endpoint |
+| `OG_COMPUTE_BASE_URL` | ❌ | `https://router-api-testnet.integratenetwork.work/v1` | Compute Router endpoint (fallback only) |
 | `OG_COMPUTE_MODEL` | ❌ | `qwen/qwen2.5-omni-7b` | LLM model for inference |
+| `OG_COMPUTE_FALLBACK` | ❌ | `false` | Skip the official 0G Compute SDK and use the legacy router URL. No TEE verification. |
+| `OG_COMPUTE_FUND_AMOUNT` | ❌ | `0.05` | OG to top up the selected provider's inference sub-account at startup |
+| `OG_COMPUTE_PROVIDER_ADDRESS` | ❌ | _(empty)_ | Optional explicit provider address; must still be a chatbot+TeeML service |
 | `OG_INDEXER_RPC` | ❌ | `https://indexer-storage-testnet-turbo.0g.ai` | Storage indexer RPC |
 | `OG_MEMORY_ENABLED` | ❌ | `true` | Enable F1 permanent memory |
 | `OG_MEMORY_CONTEXT_WINDOW` | ❌ | `10` | Recent messages to inject as LLM context |

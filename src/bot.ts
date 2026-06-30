@@ -24,6 +24,7 @@ import {
 import { naming } from './wallet/namingState';
 import { swapState } from './wallet/swapState';
 import { sendState } from './wallet/sendState';
+import * as usernameIndex from './wallet/usernameIndex';
 import { handleAiMessage } from './handlers/aiHandler';
 import { handleSwapConfirm, handleSwapCancel } from './handlers/swapHandlers';
 import {
@@ -48,6 +49,18 @@ import {
 
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+
+  // 0) Username recorder: passively populate the @username → userId index on
+  //    every incoming message. Runs first so every later handler still
+  //    fires; never short-circuits.
+  bot.on('message:text', (ctx, next) => {
+    const username = ctx.from?.username;
+    const userId = ctx.from?.id != null ? String(ctx.from.id) : null;
+    if (username && userId) {
+      usernameIndex.record(username, userId);
+    }
+    return next();
+  });
 
   // 1) Naming interceptor: when a wallet is awaiting a name (after the user saved
   //    their key, or via Settings → Change name), capture their next plain message

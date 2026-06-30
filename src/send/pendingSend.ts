@@ -5,6 +5,8 @@ export interface PendingSend {
   amountWei: string; // stringified bigint
   amountLabel: string; // e.g. "0.1 OG"
   summary: string; // markdown shown with the Confirm button
+  recipientKind?: 'address' | 'username';
+  resolvedUsername?: string;
 }
 
 const pending = new Map<string, PendingSend>();

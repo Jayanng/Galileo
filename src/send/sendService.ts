@@ -8,9 +8,16 @@ import { pendingSends } from './pendingSend';
 export type PrepareSendResult = { ok: true; summary: string } | { ok: false; error: string };
 export type ExecuteSendResult = { ok: true; hash: string; summary: string } | { ok: false; error: string };
 
+export interface PrepareSendReq {
+  to: string;
+  amount: string;
+  recipientKind?: 'address' | 'username';
+  resolvedUsername?: string;
+}
+
 export async function prepareSend(
   userId: string,
-  req: { to: string; amount: string },
+  req: PrepareSendReq,
 ): Promise<PrepareSendResult> {
   if (!isAddress(req.to)) {
     return { ok: false, error: `"${req.to}" is not a valid address.` };
@@ -41,6 +48,10 @@ export async function prepareSend(
   }
 
   const amountLabel = `${req.amount} OG`;
+  const toLine =
+    req.recipientKind === 'username' && req.resolvedUsername
+      ? `\`@${req.resolvedUsername}\` → \`${req.to}\``
+      : `\`${req.to}\``;
   const summary = [
     `📤 *Send ${amountLabel}*`,
     '',
@@ -48,7 +59,7 @@ export async function prepareSend(
     `\`${wallet.address}\``,
     '',
     'To:',
-    `\`${req.to}\``,
+    toLine,
   ].join('\n');
 
   pendingSends.set(userId, {
@@ -58,6 +69,8 @@ export async function prepareSend(
     amountWei: amountWei.toString(),
     amountLabel,
     summary,
+    recipientKind: req.recipientKind,
+    resolvedUsername: req.resolvedUsername,
   });
 
   return { ok: true, summary };

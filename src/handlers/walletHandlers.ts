@@ -116,7 +116,7 @@ export async function handleHelp(ctx: Context): Promise<void> {
       '/wrap — wrap OG → WOG (e.g. /wrap 0.1)',
       '/unwrap — unwrap WOG → OG (e.g. /unwrap 0.1)',
       '/swap — swap tokens (e.g. /swap 0.1 OG USDC), or open the Swap menu',
-      '/send — send OG to an address (e.g. /send 0x... 0.1)',
+      '/send — send OG to a recipient (e.g. /send @user 0.1 or /send 0x... 0.1)',
       '/help — this message',
       '',
       'You can also just chat: "create a wallet called savings", "wrap 0.1 OG", "what’s my balance?"',

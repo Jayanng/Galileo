@@ -1,6 +1,8 @@
 export interface SendDraft {
   stage: 'address' | 'amount';
   to?: string;
+  recipientKind?: 'address' | 'username';
+  resolvedUsername?: string;
 }
 
 const pending = new Map<string, SendDraft>();

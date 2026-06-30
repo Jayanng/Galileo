@@ -11,7 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/wallet/crypto.test.ts"
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.10",

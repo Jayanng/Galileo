@@ -22,5 +22,4 @@ export const FAQ_TEXT = [
   '*Where are my keys stored?*',
   'Encrypted and stored by the bot. Never share your private key. (draft)',
   '',
-  '_Rough placeholders — edit src/faq.ts to use your own words._',
 ].join('\n');

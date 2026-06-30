@@ -286,6 +286,8 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | *"rename my wallet to main"* | Renames the specified wallet |
 | *"what did I do yesterday?"* | Searches permanent memory for yesterday's activity |
 | *"what's my first wallet?"* | Recalls the earliest wallet creation from memory |
+| *"send 0.1 OG to @tebasv2"* | Resolves @tebasv2 to their active wallet and shows a Confirm button |
+| *"/send 0xAbC... 0.1"* | Stages a send to that exact address |
 
 ### Quick-Action Buttons
 

@@ -11,7 +11,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/wallet/crypto.test.ts"
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-compute-ts-sdk": "^0.8.4",
@@ -26,6 +26,8 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/qrcode": "^1.5.5",
+    "@uniswap/v2-core": "^1.0.1",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

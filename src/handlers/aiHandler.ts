@@ -1,8 +1,9 @@
 import { InlineKeyboard, type Context } from 'grammy';
 import { runAgent } from '../ai/agent';
 import { recordMessage, recordProof, getRecent, search } from '../ai/memory';
-import { actionKeyboard } from './walletHandlers';
 import { config } from '../config';
+import { pendingSwaps } from '../swap/pendingSwap';
+import { swapConfirmKeyboard } from './swapUiHandlers';
 import type { ChatMessage } from '../og/compute';
 import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai/memory';
 
@@ -314,16 +315,14 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     }
 
     // ── Send the reply with quick-action buttons ──
-    // Split long messages and send each part. Footer (if any) was already
-    // appended to the reply before splitting — splitLongMessage preserves
-    // it on the last part naturally because footer is appended to the end.
+    // Split long messages and send each part. If a swap was just prepared, attach a
+    // Confirm/Cancel keyboard to the last part (nothing executes until confirmed).
+    const swapKb = pendingSwaps.get(userId) ? swapConfirmKeyboard() : undefined;
     const parts = splitLongMessage(finalReply);
     for (let i = 0; i < parts.length; i++) {
-      // Only attach action keyboard to the LAST part
-      const kb = i === parts.length - 1 ? actionKeyboard() : undefined;
       await ctx.reply(parts[i], {
         parse_mode: 'Markdown',
-        reply_markup: kb,
+        reply_markup: i === parts.length - 1 ? swapKb : undefined,
       });
     }
 
@@ -350,7 +349,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
         'If the problem persists, use /help to see commands that work without AI.',
       ].join('\n'),
       {
-        reply_markup: new InlineKeyboard().text('❓ Help', 'action:help'),
+        reply_markup: new InlineKeyboard().text('❓ Help', 'home:help'),
       },
     );
   }

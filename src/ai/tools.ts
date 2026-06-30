@@ -121,16 +121,17 @@ export const toolDefinitions: ChatTool[] = [
       name: 'search_history',
       description:
         "Search the user's permanent memory on 0G Storage for past interactions — messages, tool calls, wallet activity, transactions. Use this whenever the user asks about past activity that is NOT about TEE proofs. " +
-        "Example user phrases: 'what did I do today', 'what did I do yesterday', 'when did I create my savings wallet', 'what did I ask you last week', 'what did I do in the last hour', 'show me my recent activity', 'what happened earlier', 'show my chat history', 'recap my day', 'what transactions did I make'. " +
+        "Example user phrases: 'what did I do today', 'what did I do yesterday', 'when did I create my savings wallet', 'what did I ask you last week', 'what did I do in the last hour', 'show me my recent activity', 'what happened earlier', 'show my chat history', 'recap my day', 'what transactions did I make', 'which wallet did I send to', 'where did I send my OG', 'show me my transactions'. " +
         "Supports free-text search (query) and convenient timeRange presets. " +
-        "DIFFERENT from get_proofs: search_history is for general chat history and wallet activity. get_proofs is ONLY for TEE verification records.",
+        "DIFFERENT from get_proofs: search_history is for general chat history and wallet activity. get_proofs is ONLY for TEE verification records. " +
+        "If the user asks about 'which wallet did I send to?' or 'who did I send OG to?', call search_history(query=\"send\") — NEVER answer with get_balance (which only shows current balances, not past sends).",
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
             description:
-              'Optional free-text to search for (case-insensitive substring match against message content). E.g., "savings", "create", "balance", "yesterday".',
+              'Optional free-text to search for (case-insensitive substring match against message content). E.g., "savings", "create", "balance", "yesterday", "send", "receive".',
           },
           timeRange: {
             type: 'string',
@@ -333,6 +334,58 @@ export const toolDefinitions: ChatTool[] = [
           },
         },
         required: ['walletId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'transaction_stats',
+      description:
+        "Get the user's transaction totals. Use this whenever the user asks how many transactions they've done, their total transaction count, total volume, how much they've sent/swapped, or 'my activity totals'. Returns: onChainTxCount (true count of on-chain transactions sent across all their wallets), recordedCount (transactions this bot has logged), byType (breakdown like { send: 3, swap: 2 }), and volumeByUnit (total amount transacted per token, e.g. { OG: \"1.6\", USDC: \"200\" }). Volume is only known for transactions done through this bot. " +
+        "IMPORTANT: onChainTxCount is a raw number only — it has NO details about destinations, amounts, or wallet names. If the user asks 'what are those transactions?' or 'show me the details' after you report a count, you MUST call search_history to retrieve the actual records.",
+      parameters: {
+        type: 'object',
+        properties: {
+          timeRange: {
+            type: 'string',
+            description:
+              'Optional preset to limit the recorded stats by time: "today", "yesterday", "last7days", "last30days", or "all" (default). Affects recordedCount/byType/volumeByUnit; onChainTxCount is always all-time.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'swap',
+      description:
+        "PREPARE a token swap from the user's active wallet on 0G Galileo. This does NOT execute — it stages the swap and the user must tap a Confirm button afterward. Supports wrap (OG → WOG) and unwrap (WOG → OG) today; token-to-token needs a configured DEX. After calling this, tell the user the swap is prepared and ask them to tap Confirm. " +
+        "Example: swap(from='OG', to='WOG', amount='5') or swap(from='WOG', to='OG', amount='2.5') or swap(from='OG', to='USDC', amount='1'). " +
+        "CRITICAL: NEVER substitute a different token than the user asked for — do NOT turn a 'USDC' or 'USDT' request into a WOG wrap. If the swap tool returns an error that the token/DEX isn't available, relay that honestly. For a reliable guided flow, you can always point users to the 🔄 Swap button on /start, or the /wrap, /unwrap, and /swap commands.",
+      parameters: {
+        type: 'object',
+        properties: {
+          from: {
+            type: 'string',
+            description: 'Input token: "OG" (native), "WOG", or a 0x token contract address.',
+          },
+          to: {
+            type: 'string',
+            description: 'Output token: "OG", "WOG", or a 0x token contract address.',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of the INPUT token, as a decimal string (e.g. "5", "0.25").',
+          },
+          walletId: {
+            type: 'string',
+            description: 'Optional wallet id; defaults to the user\'s active wallet.',
+          },
+        },
+        required: ['from', 'to', 'amount'],
       },
     },
   },

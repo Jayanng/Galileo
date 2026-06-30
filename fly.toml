@@ -1,0 +1,36 @@
+# Fly.io config — 0G Memory Wallet Telegram bot.
+# A single always-on machine: grammY long-polling + a /health HTTP endpoint
+# (so uptime monitors and cron pingers have something to hit).
+app = "galielo"
+primary_region = "ord"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  # Persist wallet data on the volume mounted at /data (NOT the ephemeral rootfs).
+  WALLET_STORE_PATH = "/data/wallets.json"
+  # F1 memory's userId → 0G Storage rootHash index. MUST live on the volume too —
+  # if it sits on the ephemeral rootfs, every restart/redeploy wipes it and all
+  # recorded transactions become unfindable ("no bot-recorded transactions yet").
+  OG_STORAGE_INDEX_PATH = "/data/root-index.json"
+
+# Public HTTP surface — just the /health endpoint. auto-stop is OFF so the machine
+# stays up 24/7 to keep long-polling Telegram (the proxy must never stop it).
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+# Persistent storage for encrypted wallet records, active-wallet selection, and the
+# F1 memory root-index.
+[mounts]
+  source = "galileo_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

@@ -1,6 +1,6 @@
 # 0G Memory Wallet — Telegram bot (grammY long-polling worker).
 # Runs the TypeScript entrypoint directly via tsx.
-FROM node:22-slim
+FROM node:24-slim
 
 WORKDIR /app
 

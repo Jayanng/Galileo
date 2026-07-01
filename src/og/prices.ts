@@ -203,3 +203,16 @@ export const KNOWN_SYMBOLS: string[] = [
     ...Object.keys(STABLECOIN_HARDCODE),
   ]),
 ];
+
+/**
+ * Symbol → CoinGecko ID mapping (stablecoins excluded — they have no real market
+ * price and are hardcoded to $1). Exported so callers that need to store the
+ * canonical ID (e.g. the alert worker) can resolve without a round-trip.
+ */
+export const SYMBOL_TO_COINGECKO_ID: Record<string, string> = { ...SYMBOL_TO_ID };
+
+/** True when the symbol has a real CoinGecko mapping (not a hardcoded stablecoin). */
+export function hasCoinGeckoId(symbol: string): boolean {
+  const upper = symbol.toUpperCase().trim();
+  return Object.prototype.hasOwnProperty.call(SYMBOL_TO_COINGECKO_ID, upper);
+}

@@ -12,6 +12,9 @@ import { config } from '../config';
  * Empty state: "🔐 No verified chats yet." (when memory is enabled but the
  * user has not had any verified AI replies yet) OR a fallback-mode message
  * (when OG_COMPUTE_FALLBACK=true — no proofs are recorded in that mode).
+ *
+ * See also the full integration reference: 0G-INTEGRATION.md at repo root,
+ * and the public proof index at GET /proofs (health endpoint).
  */
 export async function handleProof(ctx: Context): Promise<void> {
   const userId = ctx.from?.id ? String(ctx.from.id) : null;
@@ -37,9 +40,15 @@ export async function handleProof(ctx: Context): Promise<void> {
   const proofs = await getRecentProofs(userId, 10);
 
   if (proofs.length === 0) {
-    await ctx.reply('🔐 No verified chats yet. Send me a message first and try again.', {
-      parse_mode: 'Markdown',
-    });
+    await ctx.reply([
+        '🔐 No verified chats yet. Send me a message first and try again.',
+        '',
+        'See the [0G Integration Reference](https://github.com/Jayanng/Galileo/blob/Master/0G-INTEGRATION.md) for the full audit trail.',
+      ].join('\n'),
+      {
+        parse_mode: 'Markdown',
+      },
+    );
     return;
   }
 
@@ -66,6 +75,8 @@ export async function handleProof(ctx: Context): Promise<void> {
       ...lines,
       '',
       '_TEE signature is checked against the provider\'s attested signer address. ✓ = valid, ✗ = failed, ⏳ = verification not completed._',
+      '',
+      '📖 [0G Integration Reference](https://github.com/Jayanng/Galileo/blob/Master/0G-INTEGRATION.md) — full audit trail for all 0G touchpoints.',
     ].join('\n'),
     { parse_mode: 'Markdown' },
   );

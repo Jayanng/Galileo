@@ -8,8 +8,12 @@
 [![0G Chain](https://img.shields.io/badge/0G-Galileo%20Testnet-00D4AA)](https://0g.ai)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![CI](https://github.com/Jayanng/Galileo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jayanng/Galileo/actions)
+[![0G Integration](https://img.shields.io/badge/0G_Integration-Reference-00D4AA)](0G-INTEGRATION.md)
 
-[Features](#features) • [Architecture](#architecture) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Usage](#usage) • [Project Structure](#project-structure) • [Roadmap](#roadmap)
+[Features](#features) • [Architecture](#architecture) • [0G Integration Reference](0G-INTEGRATION.md) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Usage](#usage) • [Project Structure](#project-structure) • [Roadmap](#roadmap)
+
+<img src="docs/architecture.svg" alt="0G Memory Wallet Architecture" width="100%"/>
 
 </div>
 
@@ -76,6 +80,14 @@ Auto-detects and responds in: English, Pidgin English, Yoruba, Igbo, Hausa, Fren
 - Operator wallet handles gas and storage writes
 - Per-user wallets are independently generated
 
+### 🌿 Self-Healing In-Memory Registry
+
+The Telegram `@username → userId` registry lives in process memory as the **single source of truth at runtime** — every incoming message refreshes it, so the index rebuilds organically after every restart. Zero per-message latency, zero consistency checks, zero restoration drills.
+
+When 0G Storage is enabled (`OG_STORAGE_ENABLED=true`), an **additive persistence layer** keeps the registry warm across restarts: `hydrate()` loads the latest snapshot at startup, and every `record()` fires a non-blocking `uploadJson` of the current Map state. The in-memory API (`record()` / `lookup()` / `count()` / `clear()`) is unchanged — persistence is opt-in and falls back to the original behavior when disabled, so the design degrades cleanly if 0G Storage is unreachable.
+
+See [0G-INTEGRATION.md §4](0G-INTEGRATION.md#4-username-registry-handle--userid-resolution) for the layered architecture diagram and the design rationale.
+
 ### 🔐 TEE-Verifiable Inference
 
 Every AI reply carries a verification footer:
@@ -92,6 +104,22 @@ The 0G Compute Network SDK signs each request and verifies the provider's TEE-si
 - Quick-action buttons for common tasks
 - Smart message splitting (handles >4096 character responses)
 - Typing indicators during LLM inference
+
+### ⏰ Scheduled Intents (DCA + Alerts)
+
+Recurring on-chain actions and price-trigger notifications, persisted across restarts:
+
+```
+"dca 1 OG into USDC weekly"          → DCA intent (recurring swap on schedule)
+"alert me if OG drops below $1"      → Alert intent (one-shot Telegram message on price condition)
+```
+
+- **DCA** — Say "dca X <from> into <to> every <schedule>" (e.g. "every 6 hours", "weekly", "daily"). The bot's in-process worker ticks every 30s and fires due swaps automatically, signing with the user's decrypted key. Supported paths today: OG→USDC, OG→USDT, OG→WOG (wrap), WOG→OG (unwrap).
+- **Alerts** — "alert me if <symbol> goes <operator> <price>" (e.g. "below $1", "above $100k"). Fires once when the condition is met, then status flips to `fired`. Stablecoins (USDC/USDT) are checked without an API call; arbitrary CoinGecko IDs (e.g. "bitcoin", "ethereum") are supported.
+- **Persistence** — All intents live in the same local-mirror + 0G Storage pattern as wallets and memory. The worker re-hydrates on every bot start, so DCAs survive restarts mid-cycle.
+- **Manage** — `/intents` shows your active intents with inline Cancel and Pause/Resume buttons. The worker skips paused intents and removes cancelled ones.
+
+See [`src/intents/`](./src/intents) for the engine and [`scripts/test-intent-*.mjs`](./scripts) for unit tests.
 
 ---
 
@@ -155,7 +183,7 @@ The 0G Compute Network SDK signs each request and verifies the provider's TEE-si
 
 ### Data Flow
 
-1. **User sends message** → `aiHandler` receives the text
+1. **User sends message** → `aiHandler` receives the text; bot.ts middleware passively records `@username` into the [Username Index](0G-INTEGRATION.md#4-username-registry-handle--userid-resolution)
 2. **History loaded** → Past interactions fetched from 0G Storage (or in-memory cache)
 3. **Memory context built** → Recent + earliest entries formatted for LLM context
 4. **LLM inference** → 0G Compute processes the prompt with tool definitions
@@ -260,7 +288,7 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | `OG_COMPUTE_BASE_URL` | ❌ | `https://router-api-testnet.integratenetwork.work/v1` | Compute Router endpoint (fallback only) |
 | `OG_COMPUTE_MODEL` | ❌ | `qwen/qwen2.5-omni-7b` | LLM model for inference |
 | `OG_COMPUTE_FALLBACK` | ❌ | `false` | Skip the official 0G Compute SDK and use the legacy router URL. No TEE verification. |
-| `OG_COMPUTE_FUND_AMOUNT` | ❌ | `0.05` | OG to top up the selected provider's inference sub-account at startup |
+| `OG_COMPUTE_FUND_AMOUNT` | ❌ | `3` | OG to top up the selected provider's inference sub-account at startup |
 | `OG_COMPUTE_PROVIDER_ADDRESS` | ❌ | _(empty)_ | Optional explicit provider address; must still be a chatbot+TeeML service |
 | `OG_INDEXER_RPC` | ❌ | `https://indexer-storage-testnet-turbo.0g.ai` | Storage indexer RPC |
 | `OG_MEMORY_ENABLED` | ❌ | `true` | Enable F1 permanent memory |
@@ -269,6 +297,8 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | `OG_MEMORY_MAX_ENTRIES` | ❌ | `1000` | Max entries per user (oldest pruned) |
 | `WALLET_GAS_DRIP` | ❌ | `0` | OG amount to drip to new wallets |
 | `WALLET_STORE_PATH` | ❌ | `.data/wallets.json` | Local encrypted wallet store |
+
+> ⚠️ **Secrets in `.env`** — Your local `.env` contains real private keys and deployed-contract addresses. It is gitignored (so it won't be pushed), but it is still sensitive. Never copy it to cloud-sync folders, backups, or share its contents in chat/issues. If it leaks, rotate immediately via `fly secrets set`. See [DEPLOY.md § Secrets handling](DEPLOY.md#secrets-handling) for the full checklist.
 
 ---
 
@@ -288,6 +318,36 @@ The bot will create a wallet, show you the address and private key, and ask you 
 | *"what's my first wallet?"* | Recalls the earliest wallet creation from memory |
 | *"send 0.1 OG to @tebasv2"* | Resolves @tebasv2 to their active wallet and shows a Confirm button |
 | *"/send 0xAbC... 0.1"* | Stages a send to that exact address |
+| *"swap 0.1 OG to USDC"* | Stages a token swap and shows a Confirm button |
+| *"wrap 1 OG"* | Stages a wrap (OG → WOG) and shows a Confirm button |
+| *"what's my portfolio worth?"* | Shows all wallets with USD prices + grand total; records a daily snapshot |
+| *"how much is bitcoin?"* | Quick CoinGecko USD price lookup |
+| *"how many transactions have I done?"* | Returns total tx count, breakdown by type, and total volume per token (via the `transaction_stats` tool) |
+| *"show my P&L this week"* | Renders a daily snapshot table with % change vs the baseline |
+
+### Commands (deterministic shortcuts)
+
+For latency-sensitive or guaranteed-execution flows, the bot also accepts explicit commands. These bypass the LLM tool-calling layer and always show a Confirm button before anything moves on-chain:
+
+| Command | What it does |
+|---|---|
+| `/portfolio` | All wallets with USD prices + grand total (records a daily snapshot) |
+| `/price <symbol\|coingecko-id>` | Quick USD price lookup (e.g. `/price bitcoin`, `/price USDC`) |
+| `/history [day\|week\|month]` | Portfolio P&L over time from daily snapshots |
+| `/proof` | List your last 10 TEE-verified chats |
+| `/balance` | OG balance for all wallets |
+| `/wallet` | Create a new wallet |
+| `/address` | List wallet addresses |
+| `/privatekey` | Reveal a wallet's private key (one-tap hide) |
+| `/wrap <amount>` | Wrap OG → WOG |
+| `/unwrap <amount>` | Unwrap WOG → OG |
+| `/swap <amount> <FROM> <TO>` | Token swap (e.g. `/swap 0.1 OG USDC`); opens the Swap menu with no args |
+| `/send <recipient> <amount>` | Send OG to `@handle` or `0x...` address |
+| `/intents` | List your DCA + alert intents with Cancel/Pause buttons |
+| `/cancel <id>` | Cancel a scheduled intent by id (or use the inline button) |
+| `/pause <id>` | Pause or resume a scheduled intent by id (or use the inline button) |
+
+> Deterministic parsing lives in `src/handlers/swapUiHandlers.ts` and `src/handlers/sendUiHandlers.ts`; fuzzy natural-language phrases fall through to the AI agent.
 
 ### Quick-Action Buttons
 
@@ -315,34 +375,78 @@ src/
 ├── index.ts                  # Entry point: load config, start bot
 ├── config.ts                 # Zod-validated environment config
 ├── bot.ts                    # grammY bot setup + routing
+├── health.ts                 # /health + /proofs HTTP endpoints
+├── faq.ts                    # /help FAQ text
 │
 ├── og/
-│   ├── compute.ts            # 0G Compute Router client (OpenAI-compatible)
+│   ├── compute.ts            # 0G Compute Router client (OpenAI-compatible, fallback)
+│   ├── computeBroker.ts      # 0G Compute broker (TEE-verifiable inference, default)
 │   ├── chain.ts              # ethers v6 provider + operator wallet
-│   ├── storage.ts            # 0G Storage (legacy KV, not used for memory)
-│   └── fileStorage.ts        # 0G Storage File Mode (rolling snapshots)
+│   ├── fileStorage.ts        # 0G Storage File Mode (rolling snapshots)
+│   ├── portfolio.ts          # Portfolio aggregation + USD pricing + snapshot types
+│   ├── prices.ts             # CoinGecko USD price feed (60s cache)
+│   ├── dex.ts                # Uniswap-V2 router/factory wrappers
+│   ├── erc20.ts              # ERC-20 helpers (allowance, transfer)
+│   └── wog.ts                # WOG (WETH9 clone) wrap/unwrap helpers
 │
 ├── ai/
 │   ├── agent.ts              # Tool-calling agent loop (max 5 iterations)
-│   ├── tools.ts              # Tool definitions (create_wallet, list_wallets, etc.)
-│   ├── toolExecutor.ts       # Dispatches LLM tool calls to walletService
+│   ├── tools.ts              # Tool definitions (15 tools: create_wallet, list_wallets, send_og, prepare_swap, get_price_usd, transaction_stats, …)
+│   ├── toolExecutor.ts       # Dispatches LLM tool calls to services
 │   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
-│   └── memory.ts             # F1: permanent memory (0G Storage snapshots)
+│   ├── memory.ts             # F1: permanent memory (0G Storage snapshots)
+│   └── memory.test.ts
+│
+├── analytics/
+│   └── snapshot.ts           # Daily portfolio snapshots (local file, /history backend)
 │
 ├── handlers/
 │   ├── aiHandler.ts          # Natural language handler (AI agent entry point)
-│   └── walletHandlers.ts      # Wallet command handlers + quick-action buttons
+│   ├── walletHandlers.ts     # Wallet command handlers + quick-action buttons
+│   ├── portfolioHandlers.ts  # /portfolio, /price, /history
+│   ├── proofHandler.ts       # /proof command (recent TEE-verified chats)
+│   ├── swapHandlers.ts       # Swap Confirm/Cancel callbacks
+│   ├── swapUiHandlers.ts     # /swap command + deterministic swap parsing
+│   ├── sendHandlers.ts       # Send Confirm/Cancel callbacks
+│   ├── sendUiHandlers.ts     # /send command + deterministic send parsing
+│   └── sendUiHandlers.test.ts
 │
 ├── wallet/
 │   ├── crypto.ts             # AES-256-GCM encrypt/decrypt
 │   ├── crypto.test.ts        # Crypto unit test
 │   ├── walletStore.ts        # Local + 0G-backed encrypted persistence
-│   ├── walletService.ts      # Wallet generation, balance, rename
-│   └── namingState.ts        # Wallet naming flow state management
+│   ├── walletService.ts      # Wallet generation, balance, rename, send, swap
+│   ├── activeWallet.ts       # Active-wallet selection per user
+│   ├── namingState.ts        # Wallet naming flow state management
+│   ├── swapState.ts          # Per-user swap-amount waiting state
+│   ├── sendState.ts          # Per-user send-amount waiting state
+│   ├── recipientResolver.ts  # @handle / 0x... → wallet address resolution
+│   ├── recipientResolver.test.ts
+│   ├── usernameIndex.ts      # @handle → userId index (in-memory)
+│   └── usernameIndex.test.ts
+│
+├── swap/
+│   ├── swapService.ts        # Swap orchestration (prepare/execute)
+│   └── pendingSwap.ts        # Pending-swap state for Confirm buttons
+│
+├── send/
+│   ├── sendService.ts        # Send orchestration (prepare/execute)
+│   └── pendingSend.ts        # Pending-send state for Confirm buttons
 │
 └── util/
     └── qr.ts                 # Address → QR PNG generator
 ```
+
+### AI Tools (summary)
+
+The agent exposes 15 LLM-callable tools in `src/ai/tools.ts`. Highlights:
+
+- `transaction_stats` — On-chain tx count, recorded count, breakdown by type, and volume per token. Used when the user asks "how many transactions have I done?" or "what's my total volume?".
+- `get_price_usd` — USD price for any tracked token (OG, WOG, USDC, USDT) or any CoinGecko id.
+- `prepare_swap` — Stages a wrap/unwrap or DEX swap; never executes without a Confirm button.
+- `search_history` / `get_recent_proofs` — Memory and TEE-proof retrieval.
+- `send_og` / `create_wallet` / `list_wallets` / `rename_wallet` / etc. — Wallet CRUD.
+- `dca_create` / `alert_create` / `list_intents` / `cancel_intent` / `pause_intent` / `resume_intent` — Scheduled intents (DCA + alerts). Created intents are picked up by the in-process worker every 30s.
 
 ---
 
@@ -355,9 +459,12 @@ src/
 | **F7** Multi-Language Support | ✅ Complete |
 | **F1** Infinite Memory (0G Storage) | ✅ Complete |
 | **UX** Quick-action buttons, loading states, message splitting | ✅ Complete |
-| **F3** Verifiable AI Portfolio Advisor | ⏳ Planned |
+| **F3** Verifiable AI Portfolio Advisor | ✅ Complete (`/portfolio`, `/price`, `/history` + `transaction_stats` tool) |
 | **F5** Verifiable AI Receipts | ⏳ Planned |
 | **F6** Smart Link / Action Generator | ⏳ Planned |
+| **DEX** Demo Uniswap-V2 + mock USDC/USDT on 0G Galileo | ✅ Complete |
+| **Username Registry Persistence** | ✅ Complete (in-memory + optional 0G Storage layer, gated by `OG_STORAGE_ENABLED`) |
+| **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 6 AI tools; ticks every 30s, survives restarts via 0G Storage) |
 
 ---
 
@@ -370,9 +477,43 @@ npm run dev
 # Type-check only
 npm run typecheck
 
-# Run tests
+# Run tests (discovers and runs every scripts/test-*.mjs)
 npm test
 ```
+
+### Tests
+
+The test runner (`scripts/run-tests.mjs`) auto-discovers every `scripts/test-*.mjs` file and runs it in lexical order. Current suite:
+
+- `scripts/test-handle-send-confirm.mjs` — Send Confirm/Cancel callback flow
+- `scripts/test-parse-send-text.mjs` — Send text parser (address + amount)
+- `scripts/test-parse-send-text-extended.mjs` — Extended send parser edge cases
+- `scripts/test-recipient-resolver.mjs` — @handle / 0x... recipient resolution
+- `scripts/test-recipient-resolver-branches.mjs` — Resolver edge branches (no_wallets, self, etc.)
+- `scripts/test-send-command.mjs` — `/send` command end-to-end
+- `scripts/test-stage-send-message.mjs` — Send staging flow
+- `scripts/test-username-index.mjs` — Username index (case, trim, overwrite)
+- `scripts/test-portfolio-history.mjs` — Portfolio rendering + snapshot recording + P&L computation
+
+Unit tests alongside source (run by `npm run typecheck` + the mjs suite):
+- `src/wallet/crypto.test.ts`
+- `src/wallet/recipientResolver.test.ts`
+- `src/wallet/usernameIndex.test.ts`
+- `src/ai/memory.test.ts`
+- `src/handlers/sendUiHandlers.test.ts`
+
+### Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `Master`:
+- **Lint + Typecheck** (`npm run typecheck`)
+- **Test** (`npm test`)
+- Matrix: Node.js 20 and 22
+
+The badge at the top of this README reflects the latest CI run.
+
+### Debug Scripts
+
+- `scripts/compare-addresses.ts` — One-off helper that compares a 0G explorer URL's address against the operator wallet derived from `OPERATOR_PRIVATE_KEY`. Useful when debugging "why doesn't my tx show up under my wallet?".
 
 ### Testing Memory
 

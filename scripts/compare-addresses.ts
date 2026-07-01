@@ -1,3 +1,23 @@
+/**
+ * compare-addresses.ts
+ *
+ * One-off debug helper: compares a 0G ChainScan explorer URL's address against
+ * the operator wallet derived from `OPERATOR_PRIVATE_KEY`. Useful when a tx
+ * doesn't appear under the expected wallet on the explorer and you want to
+ * rule out a checksum/casing mismatch or a different EOA.
+ *
+ * Usage:
+ *   1. Paste the address from the explorer URL into `URL_ADDRESS` below.
+ *   2. Ensure OPERATOR_PRIVATE_KEY is set (or in .env) for the wallet you
+ *      expect to be looking at.
+ *   3. Run: npx tsx scripts/compare-addresses.ts
+ *
+ * The script canonicalizes both addresses (ethers.getAddress) and reports
+ * whether they refer to the same underlying EOA or different ones.
+ *
+ * This is a debugging tool, not part of the runtime bot.
+ */
+
 import 'dotenv/config';
 import { ethers } from 'ethers';
 import { operatorWallet } from '../src/og/chain';

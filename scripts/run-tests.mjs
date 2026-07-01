@@ -26,7 +26,16 @@ const failedNames = [];
 for (const f of files) {
   const full = join(dir, f);
   console.log(`\n=== Running: ${f} ===`);
-  const r = spawnSync('node', [full], { stdio: 'inherit' });
+  // Tests that import complex TS source modules (e.g. src/intents/*) need tsx
+  // resolution + parameter-property support; plain node strip-only mode can't
+  // handle those. Detect by filename prefix and route through the local tsx
+  // binary directly (avoids `npx` resolution flakiness in spawned processes).
+  const useTsx = /^test-intent-/.test(f);
+  const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
+  const tsxPath = join(here, 'node_modules', '.bin', tsxBin);
+  const cmd = useTsx ? tsxPath : 'node';
+  const args = useTsx ? [full] : [full];
+  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' });
   if (r.status === 0) {
     passed++;
   } else {

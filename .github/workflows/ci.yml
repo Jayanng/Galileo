@@ -24,6 +24,22 @@ jobs:
 
       - run: npm ci
 
+      # Provide a minimal .env for tests that transitively import
+      # src/config.ts (which validates required env vars at module load
+      # time via Zod). .env is gitignored, so it doesn't exist on the
+      # runner — without this, test-intent-executor/store/ui-parsers/
+      # worker all fail at import with "Invalid environment
+      # configuration". Dummy values are fine: the unit tests under
+      # test-intent-* never connect to Telegram, 0G, or any network.
+      - name: Create test .env
+        run: |
+          cat > .env <<'EOF'
+          TELEGRAM_BOT_TOKEN=test_token_for_ci
+          OPERATOR_PRIVATE_KEY=0x0000000000000000000000000000000000000000000000000000000000000001
+          OG_COMPUTE_API_KEY=test_key_for_ci
+          WALLET_ENCRYPTION_KEY=test_encryption_key_long_enough_for_ci
+          EOF
+
       - name: Typecheck
         run: npm run typecheck
 

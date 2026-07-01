@@ -1,0 +1,68 @@
+name: Generate Proofs
+
+on:
+  schedule:
+    # Every 6 hours, matching the suggested cadence in scripts/generateProofIndex.ts.
+    - cron: '0 */6 * * *'
+  # Allow manual runs from the Actions tab for backfills or testing.
+  workflow_dispatch:
+
+# Avoid concurrent runs colliding on the same branch.
+concurrency:
+  group: proofs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Needed to push the updated public/proofs.json back to the repo.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - run: npm ci
+
+      # Dummy env vars satisfy config.ts validation. The script only reads
+      # from 0G Storage (no signing, no Telegram API calls, no LLM calls),
+      # so these values never touch a real network. The real operator
+      # wallet key never leaves the Fly machine's secret store.
+      - name: Generate proofs.json
+        env:
+          TELEGRAM_BOT_TOKEN: 'dummy-token-for-cron'
+          OPERATOR_PRIVATE_KEY: '0x0000000000000000000000000000000000000000000000000000000000000001'
+          WALLET_ENCRYPTION_KEY: 'dummy-encryption-key-long-enough-for-zod-validation'
+          OG_COMPUTE_API_KEY: 'dummy-api-key-for-cron'
+          OG_STORAGE_INDEX_PATH: '.data/root-index.json'
+          PROOFS_HASH_SALT: 'dummy-salt-for-ci-only-not-secret-xxxxxxxxxxxx'
+        run: npm run generate-proofs
+
+      # Only commit when the script actually produced data. In CI there is
+      # no user index, so proofs.json comes back empty and we skip the
+      # commit to avoid overwriting a real proofs.json on Master with
+      # empty content. Real proof regeneration happens on the Fly
+      # machine where the persistent volume holds OG_STORAGE_INDEX_PATH.
+      - name: Commit updated proofs.json (skip if empty)
+        run: |
+          if [ -f public/proofs.json ] \
+              && grep -q '"userCount":\s*0' public/proofs.json \
+              && grep -q '"totalProofs":\s*0' public/proofs.json; then
+            echo "Skipping commit — proofs.json is empty (CI has no user index)"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/proofs.json
+          if git diff --cached --quiet; then
+            echo "No changes to proofs.json — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(proofs): regenerate public/proofs.json [skip ci]"
+          git push

@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-07-01T01:05:17.392Z",
+  "userCount": 10,
+  "totalProofs": 3,
+  "entries": [
+    {
+      "userHash": "u30aea27c04ce",
+      "ts": "2026-06-30T15:00:00.000Z",
+      "teeChatID": "24935ee3-c521-49a9-898e-8ad86515d5ec",
+      "txHash": null,
+      "chainscanLink": null,
+      "storageRootHash": "0xf73f29a7cd3af064302de69a1409cfab88799f0bd2af8fdc4adb6d7d9d6ead5e",
+      "storageExplorerLink": "https://scan.0g.ai?root=0xf73f29a7cd3af064302de69a1409cfab88799f0bd2af8fdc4adb6d7d9d6ead5e",
+      "verified": true
+    },
+    {
+      "userHash": "uac631d1b06fc",
+      "ts": "2026-06-30T15:00:00.000Z",
+      "teeChatID": "596771c6-af13-45ca-a8a6-ab317684657b",
+      "txHash": null,
+      "chainscanLink": null,
+      "storageRootHash": "0x0a2e49235aeb5b9106a3e2325655951a6a33a62407856ed3b817685051e34998",
+      "storageExplorerLink": "https://scan.0g.ai?root=0x0a2e49235aeb5b9106a3e2325655951a6a33a62407856ed3b817685051e34998",
+      "verified": true
+    },
+    {
+      "userHash": "uf0e5700566b4",
+      "ts": "2026-06-30T15:00:00.000Z",
+      "teeChatID": "428dd206-c601-4769-8905-bd26833d5ae0",
+      "txHash": null,
+      "chainscanLink": null,
+      "storageRootHash": "0xcd674abe3509e69325725dfcc5678785baa4aca4a13dab3531bc9fdc59704833",
+      "storageExplorerLink": "https://scan.0g.ai?root=0xcd674abe3509e69325725dfcc5678785baa4aca4a13dab3531bc9fdc59704833",
+      "verified": true
+    }
+  ]
+}

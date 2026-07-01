@@ -93,38 +93,37 @@ class LocalWalletStore implements WalletStore {
 }
 
 /**
- * Persists each user's wallet list to 0G Storage KV, mirrored locally for fast/durable
- * reads. 0G calls are best-effort: on failure we keep working from the local mirror.
+ * Persists each user's wallet list to 0G Storage via fileStorage (same path as
+ * memory and the username index — uploadJson/downloadJson under
+ * OG_STORAGE_INDEX_PATH). Mirrored locally for fast reads. Remote writes go
+ * through uploadJson's serial queue with built-in retry; on failure we keep
+ * working from the local mirror.
  */
-class OgKvWalletStore implements WalletStore {
+class OgFileWalletStore implements WalletStore {
   constructor(private readonly local: LocalWalletStore) {}
-
-  private kvKey(userId: string): string {
-    return `wallet:${userId}`;
-  }
 
   private async pullIfEmpty(userId: string): Promise<void> {
     if ((await this.local.list(userId)).length) return;
     try {
-      const { getKV } = await import('../og/storage');
-      const bytes = await getKV(this.kvKey(userId));
-      if (!bytes) return;
-      for (const rec of normalize(JSON.parse(Buffer.from(bytes).toString('utf8')))) {
+      const { downloadJson } = await import('../og/fileStorage');
+      const list = await downloadJson<WalletRecord[]>(userId);
+      if (!list || !Array.isArray(list)) return;
+      for (const rec of normalize(list)) {
         await this.local.add(userId, rec);
       }
     } catch (e) {
-      console.warn('[storage] 0G KV read failed, using local store only:', (e as Error).message);
+      console.warn('[storage] 0G Storage read failed, using local store only:', (e as Error).message);
     }
   }
 
   private async push(userId: string): Promise<void> {
     try {
-      const { putKV } = await import('../og/storage');
-      const bytes = new TextEncoder().encode(JSON.stringify(await this.local.list(userId)));
-      const { rootHash } = await putKV(this.kvKey(userId), bytes);
+      const { uploadJson } = await import('../og/fileStorage');
+      const list = await this.local.list(userId);
+      const rootHash = await uploadJson(userId, list);
       console.log(`[storage] wallet:${userId} persisted to 0G Storage (root ${rootHash}).`);
     } catch (e) {
-      console.warn('[storage] 0G KV write failed, kept local copy only:', (e as Error).message);
+      console.warn('[storage] 0G Storage write failed, kept local copy only:', (e as Error).message);
     }
   }
 
@@ -156,7 +155,7 @@ class OgKvWalletStore implements WalletStore {
 
 export function createWalletStore(): WalletStore {
   const local = new LocalWalletStore(config.WALLET_STORE_PATH);
-  return config.OG_STORAGE_ENABLED ? new OgKvWalletStore(local) : local;
+  return config.OG_STORAGE_ENABLED ? new OgFileWalletStore(local) : local;
 }
 
 export const walletStore = createWalletStore();

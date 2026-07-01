@@ -345,7 +345,8 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
       [
         '⚠️ I had trouble processing that.',
         '',
-        'This might be a temporary issue with 0G Compute. Please try again in a moment.',
+        `Error: ${(e as Error).message}`,
+        '',
         'If the problem persists, use /help to see commands that work without AI.',
       ].join('\n'),
       {

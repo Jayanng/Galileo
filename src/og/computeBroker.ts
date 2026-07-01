@@ -249,6 +249,12 @@ export async function initializeComputeBroker(): Promise<void> {
         `(verification will be unavailable), or pick a different model.`,
     );
     console.error(`[computeBroker] ${initError.message}`);
+    console.error(`[computeBroker] available services (${services.length}):`);
+    for (const s of services) {
+      console.error(
+        `  provider=${s.provider} type=${s.serviceType} model=${s.model} verifiability=${s.verifiability}`,
+      );
+    }
     throw initError;
   }
 

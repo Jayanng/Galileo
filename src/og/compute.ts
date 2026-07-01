@@ -129,14 +129,19 @@ export async function chatVerified(
   }
 
   const broker = getBroker();
+  const startedAt = Date.now();
 
   // Resolve endpoint + model for this provider. Cache could help here later;
   // getServiceMetadata is on-chain read so keep it simple for now.
+  console.log(`[compute] getServiceMetadata for ${providerAddress}...`);
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+  console.log(`[compute] endpoint=${endpoint} model=${model} (${Date.now() - startedAt}ms)`);
 
   // Sign the request with billing headers. content is used to compute the
   // estimated fee for the request.
+  console.log(`[compute] getRequestHeaders...`);
   const headers = await broker.inference.getRequestHeaders(providerAddress, opts.userContent);
+  console.log(`[compute] headers obtained (${Date.now() - startedAt}ms acquired)`);
 
   // We use raw fetch (not the OpenAI SDK) because we need to read the
   // `ZG-Res-Key` response header. The OpenAI SDK doesn't expose response
@@ -154,13 +159,15 @@ export async function chatVerified(
   });
 
   const url = `${endpoint}/chat/completions`;
+  console.log(`[compute] POST ${url} (${Date.now() - startedAt}ms elapsed)...`);
   const fetchRes = await fetch(url, { method: 'POST', headers: fetchHeaders, body });
+  console.log(`[compute] response status=${fetchRes.status} (${Date.now() - startedAt}ms elapsed)`);
 
   if (!fetchRes.ok) {
     const text = await fetchRes.text().catch(() => '');
-    throw new Error(
-      `0G Compute provider returned ${fetchRes.status} ${fetchRes.statusText}: ${text.slice(0, 500)}`,
-    );
+    const errMsg = `0G Compute provider returned ${fetchRes.status} ${fetchRes.statusText}: ${text.slice(0, 500)}`;
+    console.error(`[compute] ${errMsg}`);
+    throw new Error(errMsg);
   }
 
   // Read chatID from the dedicated header before consuming the body. The
@@ -185,7 +192,7 @@ export async function chatVerified(
     try {
       verified = await broker.inference.processResponse(providerAddress, chatID, usageJson);
     } catch (e) {
-      console.warn(`[compute] processResponse failed: ${(e as Error).message}`);
+      console.error(`[compute] processResponse failed: ${(e as Error).message}`);
       verified = null;
     }
   }

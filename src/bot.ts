@@ -27,7 +27,7 @@ import { sendState } from './wallet/sendState';
 import * as usernameIndex from './wallet/usernameIndex';
 import { handleAiMessage } from './handlers/aiHandler';
 import { handleProof } from './handlers/proofHandler';
-import { handlePortfolio, handlePrice } from './handlers/portfolioHandlers';
+import { handlePortfolio, handlePrice, handleHistory } from './handlers/portfolioHandlers';
 import { handleSwapConfirm, handleSwapCancel } from './handlers/swapHandlers';
 import {
   handleSwapMenu,
@@ -40,6 +40,18 @@ import {
   parseSwapText,
 } from './handlers/swapUiHandlers';
 import { handleSendConfirm, handleSendCancel } from './handlers/sendHandlers';
+import {
+  parseDcaText,
+  parseAlertText,
+  stageDca,
+  stageAlert,
+} from './handlers/intentUiHandlers';
+import {
+  handleIntentsCommand,
+  handleCancelCommand,
+  handlePauseCommand,
+  handleIntentCallback,
+} from './handlers/intentHandlers';
 import {
   handleSendButton,
   handleSendAddressReply,
@@ -123,6 +135,10 @@ export function buildBot(): Bot {
   bot.command('proof', handleProof);
   bot.command('portfolio', handlePortfolio);
   bot.command('price', handlePrice);
+  bot.command('history', handleHistory);
+  bot.command('intents', handleIntentsCommand);
+  bot.command('cancel', handleCancelCommand);
+  bot.command('pause', handlePauseCommand);
 
   // 3) Home-dashboard button taps
   bot.callbackQuery(/^sel:(.+)$/, handleSelectWallet);
@@ -150,6 +166,9 @@ export function buildBot(): Bot {
   bot.callbackQuery('send:confirm', handleSendConfirm);
   bot.callbackQuery('send:cancel', handleSendCancel);
 
+  // 4c2) Intent list inline buttons (Cancel / Pause / Resume)
+  bot.callbackQuery(/^intent:(cancel|pause):[0-9a-fA-F]+$/, handleIntentCallback);
+
   // 4d) Deterministic swap-phrase matcher: clear "wrap/unwrap/swap <amount> …"
   //     messages stage a swap directly (always shows Confirm), bypassing the
   //     flaky 7B tool-calling. Anything fuzzy falls through to the AI agent.
@@ -167,6 +186,25 @@ export function buildBot(): Bot {
     const parsed = userId ? parseSendText(ctx.message.text) : null;
     if (!userId || !parsed) return next();
     await stageSend(ctx, userId, parsed);
+  });
+
+  // 4f) Deterministic DCA-phrase matcher: "dca 1 OG into USDC weekly" and
+  //     friends stage a DCA directly, bypassing the AI's flaky 7B tool-call.
+  //     Falls through to the AI agent on miss (lets the LLM try novel phrasings).
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    const parsed = userId ? parseDcaText(ctx.message.text) : null;
+    if (!userId || !parsed) return next();
+    await stageDca(ctx, userId, parsed);
+  });
+
+  // 4g) Deterministic alert-phrase matcher: "alert me if OG drops below $1"
+  //     and friends stage an alert directly. Same fall-through-to-AI semantics.
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    const parsed = userId ? parseAlertText(ctx.message.text) : null;
+    if (!userId || !parsed) return next();
+    await stageAlert(ctx, userId, parsed);
   });
 
   // 5) AI agent (F2) — natural-language understanding via 0G Compute.

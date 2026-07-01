@@ -33,12 +33,9 @@ const schema = z.object({
     .min(16, 'WALLET_ENCRYPTION_KEY should be a long random secret (>= 16 chars)'),
   WALLET_STORE_PATH: z.string().default('.data/wallets.json'),
 
-  // 0G Storage (optional in this phase)
+  // 0G Storage (optional in this phase) — file mode only
   OG_STORAGE_ENABLED: boolEnv(false),
   OG_INDEXER_RPC: z.string().url().default('https://indexer-storage-testnet-turbo.0g.ai'),
-  OG_KV_RPC: z.string().default('http://3.101.147.150:6789'),
-  OG_STREAM_ID: z.string().default(''),
-  OG_FLOW_CONTRACT: z.string().default('0x22E03a6A89B950F1c82ec5e74F8eCa321a105296'),
 
   // 0G Compute — official 0g-compute-ts-sdk broker (TEE-verifiable inference)
   OG_COMPUTE_API_KEY: z
@@ -56,15 +53,18 @@ const schema = z.object({
 
   // Amount of OG to top up the selected provider's inference sub-account at
   // startup when balance is below this threshold. Units are in OG (not neuron).
-  // The SDK recommends ≥ 1 OG per provider to satisfy its minimum-balance rule.
-  OG_COMPUTE_FUND_AMOUNT: z.string().default('0.05'),
+  // Defaults to 3 OG to match the on-chain MIN_LEDGER_BALANCE_OG=3 constant in
+  // @0gfoundation/0g-compute-ts-sdk (lib.esm/ledger/ledger.d.ts) and exceed the
+  // MIN_TRANSFER_AMOUNT_CONTRACT=1 OG sub-account-creation minimum. Operators
+  // must hold enough OG in the wallet to fund this at startup.
+  OG_COMPUTE_FUND_AMOUNT: z.string().default('3'),
 
   // Optional explicit provider address. If set, the broker skips discovery and
   // uses this provider. Must still satisfy serviceType='chatbot' and
   // verifiability='TeeML' filters.
   OG_COMPUTE_PROVIDER_ADDRESS: z.string().default(''),
 
-  // F1: Infinite Wallet Memory (0G Storage KV)
+  // F1: Infinite Wallet Memory (0G Storage)
   OG_MEMORY_ENABLED: boolEnv(true),
   OG_MEMORY_CONTEXT_WINDOW: z.coerce.number().int().positive().default(10),
   OG_MEMORY_SEARCH_LIMIT: z.coerce.number().int().positive().default(20),
@@ -79,6 +79,12 @@ const schema = z.object({
   // so it always lands on the same persistent volume — otherwise a restart wipes
   // the index and all recorded history becomes unfindable on 0G Storage.
   OG_STORAGE_INDEX_PATH: z.string().default(''),
+
+  // Privacy: salt for anonymizing userIds in the public proofs.json feed.
+  // Optional — scripts/generateProofIndex.ts falls back to a dev-only string
+  // (which warns loudly in production). Set via `fly secrets` in production
+  // so hashes stay stable across deploys. Not a credential — see DEPLOY.md.
+  PROOFS_HASH_SALT: z.string().min(16).optional(),
 
   // Swaps
   WOG_ADDRESS: z.string().default(''),
@@ -110,12 +116,6 @@ function load(): AppConfig {
   // redeploy wiped the userId → rootHash map, making recorded txs unfindable.
   if (!cfg.OG_STORAGE_INDEX_PATH) {
     cfg.OG_STORAGE_INDEX_PATH = join(dirname(cfg.WALLET_STORE_PATH), 'root-index.json');
-  }
-  if (cfg.OG_STORAGE_ENABLED && !cfg.OG_STREAM_ID) {
-    throw new Error(
-      'OG_STORAGE_ENABLED=true requires OG_STREAM_ID to be set ' +
-        '(see the 0G Storage docs — KV wallet storage needs a stream id).',
-    );
   }
   return cfg;
 }

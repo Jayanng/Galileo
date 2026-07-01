@@ -53,11 +53,10 @@ const schema = z.object({
 
   // Amount of OG to top up the selected provider's inference sub-account at
   // startup when balance is below this threshold. Units are in OG (not neuron).
-  // Defaults to 3 OG to match the on-chain MIN_LEDGER_BALANCE_OG=3 constant in
-  // @0gfoundation/0g-compute-ts-sdk (lib.esm/ledger/ledger.d.ts) and exceed the
-  // MIN_TRANSFER_AMOUNT_CONTRACT=1 OG sub-account-creation minimum. Operators
-  // must hold enough OG in the wallet to fund this at startup.
-  OG_COMPUTE_FUND_AMOUNT: z.string().default('3'),
+  // Set to 1 OG to exceed on-chain MIN_TRANSFER_AMOUNT_CONTRACT=1 while keeping
+  // automatic top-ups fast and affordable. The auto-top-up mechanism in
+  // chatVerified() refills whenever the sub-account drops below this threshold.
+  OG_COMPUTE_FUND_AMOUNT: z.string().default('1'),
 
   // Optional explicit provider address. If set, the broker skips discovery and
   // uses this provider. Must still satisfy serviceType='chatbot' and

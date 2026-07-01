@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { config } from '../config';
-import { getActiveProviderAddress, getBroker, isReady } from './computeBroker';
+import { getActiveProviderAddress, getBroker, isReady, ensureSubAccountFunded } from './computeBroker';
 
 /**
  * 0G Compute client.
@@ -187,13 +187,30 @@ export async function chatVerified(
     });
   }
 
-  let verified: boolean | null = null;
+    let verified: boolean | null = null;
   if (chatID) {
     try {
       verified = await broker.inference.processResponse(providerAddress, chatID, usageJson);
     } catch (e) {
       console.error(`[compute] processResponse failed: ${(e as Error).message}`);
       verified = null;
+    }
+  }
+
+  // Auto-top-up: after every 5 successful inferences, check the sub-account
+  // balance and refill if it drops below OG_COMPUTE_FUND_AMOUNT.
+  // This ensures the bot never runs out of inference credits as long as the
+  // operator wallet has OG to deposit into the main ledger.
+  {
+    const topUpCounter = topUpCounterMap.get(providerAddress) ?? 0;
+    const newCount = topUpCounter + 1;
+    topUpCounterMap.set(providerAddress, newCount);
+    if (newCount >= 5) {
+      topUpCounterMap.set(providerAddress, 0); // reset counter
+      console.log(`[compute] auto-top-up check #${newCount} for ${providerAddress}`);
+      ensureSubAccountFunded(broker, providerAddress).catch((err) =>
+        console.warn(`[compute] auto-top-up failed: ${(err as Error).message}`),
+      );
     }
   }
 
@@ -205,6 +222,14 @@ export async function chatVerified(
     verified,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Auto-top-up counter — persists across chatVerified calls, mapping
+// provider address to the number of successful inference calls so far.
+// Resets to 0 every time a top-up check is triggered.
+// ─────────────────────────────────────────────────────────────────────────
+
+const topUpCounterMap = new Map<string, number>();
 
 // ─────────────────────────────────────────────────────────────────────────
 // Streaming (kept for future use; no verification flow yet)

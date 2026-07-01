@@ -122,8 +122,10 @@ async function ensureMainLedgerExists(
  * Top up the provider's inference sub-account from the main ledger if the
  * current balance is below the configured threshold. No-op if balance is
  * sufficient. Logs the result either way.
+ *
+ * Exported so chatVerified() can call it periodically to auto-refill.
  */
-async function ensureSubAccountFunded(
+export async function ensureSubAccountFunded(
   broker: ZGComputeNetworkBroker,
   providerAddress: string,
 ): Promise<void> {

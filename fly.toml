@@ -1,7 +1,7 @@
 # Fly.io config — 0G Memory Wallet Telegram bot.
 # A single always-on machine: grammY long-polling + a /health HTTP endpoint
 # (so uptime monitors and cron pingers have something to hit).
-app = "galielo"
+app = "galileo-test"
 primary_region = "ord"
 
 [build]

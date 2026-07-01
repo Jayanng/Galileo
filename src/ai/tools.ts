@@ -360,6 +360,145 @@ export const toolDefinitions: ChatTool[] = [
   {
     type: 'function',
     function: {
+      name: 'dca_create',
+      description:
+        "Create a DCA (Dollar-Cost Averaging) intent: a recurring swap of a fixed amount on a schedule. The user's active wallet (or the specified walletId) is used. Supported schedules: 'daily', 'weekly', 'hourly', 'every N minutes/hours/days', 'every Monday/Tuesday/...'. Supported token pairs: OG<->USDC, OG<->USDT, OG<->WOG (wrap/unwrap). The intent runs automatically every 30 seconds' worth of polling on the bot's in-process worker, so a DCA fires within ~60s of its scheduled time. The intent persists across bot restarts on 0G Storage. " +
+        "Example user phrases: 'dca 1 OG into USDC weekly', 'dollar-cost average 0.5 OG into USDT daily', 'swap 0.1 OG for USDC every 6 hours', 'DCA me into WOG hourly'. " +
+        "Returns the created intent with id, summary, status, nextRunAt — show these to the user so they can manage it via /intents. " +
+        "Note: No funds move at creation — only on the first scheduled execution.",
+      parameters: {
+        type: 'object',
+        properties: {
+          fromToken: {
+            type: 'string',
+            description: 'Input token: "OG" (native), "WOG", "USDC", or "USDT".',
+          },
+          toToken: {
+            type: 'string',
+            description: 'Output token: "OG", "WOG", "USDC", or "USDT".',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of the INPUT token per execution, as a decimal string (e.g. "1", "0.25").',
+          },
+          schedule: {
+            type: 'string',
+            description: 'How often to execute. Examples: "daily", "weekly", "hourly", "every 6 hours", "every 30 minutes", "every Monday".',
+          },
+          walletId: {
+            type: 'string',
+            description: 'Optional wallet id (8-char hex); defaults to the user\'s active wallet.',
+          },
+        },
+        required: ['fromToken', 'toToken', 'amount', 'schedule'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'alert_create',
+      description:
+        "Create a price-alert intent: send the user a Telegram message when a token crosses a USD threshold. ONE-SHOT — fires once when the condition is met, then status flips to 'fired'. Supported symbols: OG, WOG, USDC, USDT, or any CoinGecko ID (e.g. 'bitcoin', 'ethereum', 'solana'). " +
+        "Example user phrases: 'alert me if OG drops below $1', 'notify me when bitcoin goes above $100k', 'tell me if ETH falls under $3000', 'alert me OG below 2'. " +
+        "Returns the created alert with id, summary, status — show these so the user can manage it via /intents.",
+      parameters: {
+        type: 'object',
+        properties: {
+          symbol: {
+            type: 'string',
+            description: 'Token symbol (e.g. "OG", "BTC", "ETH") or CoinGecko ID. Case-insensitive.',
+          },
+          operator: {
+            type: 'string',
+            description: 'Comparison operator: "<" (below), ">" (above), "<=" (at or below), ">=" (at or above).',
+          },
+          threshold: {
+            type: 'number',
+            description: 'USD price threshold as a positive number (e.g. 1, 100000, 0.5).',
+          },
+        },
+        required: ['symbol', 'operator', 'threshold'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_intents',
+      description:
+        "List all of the user's scheduled intents (DCAs + alerts) with their id, type, summary, status (active/paused/fired), schedule, nextRunAt, lastExecutedAt. Use this whenever the user asks 'what DCAs do I have', 'show my alerts', 'what intents are running', 'list my schedules'. " +
+        "Example user phrases: 'show my intents', 'what DCAs are active', 'list my alerts', 'what schedules do I have running'. " +
+        "DIFFERENT from /intents command: list_intents returns data; /intents renders an interactive list with Cancel/Pause buttons.",
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'cancel_intent',
+      description:
+        "Permanently cancel (delete) a scheduled intent by id. Once cancelled, the intent is removed and will not fire again. Use list_intents first to find the id. " +
+        "Example user phrases: 'cancel my weekly DCA', 'stop that alert', 'delete my DCA id abc12345'. " +
+        "WARNING: cancellation is irreversible. Confirm with the user for non-trivial cases.",
+      parameters: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'The intent id (8-char hex) to permanently remove. Resolve from list_intents.',
+          },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pause_intent',
+      description:
+        "Pause a scheduled intent by id without deleting it. While paused, the worker skips it. Use resume_intent to restart. Use list_intents first to find the id. " +
+        "Example user phrases: 'pause my DCA', 'pause that alert', 'hold off on my weekly DCA'. " +
+        "Pausing is reversible — the intent can be resumed later with resume_intent.",
+      parameters: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'The intent id (8-char hex) to pause. Resolve from list_intents.',
+          },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'resume_intent',
+      description:
+        "Resume a previously paused intent by id. Use list_intents first to find the id. " +
+        "Example user phrases: 'resume my DCA', 'unpause that alert', 'start my weekly DCA again'.",
+      parameters: {
+        type: 'object',
+        properties: {
+          id: {
+            type: 'string',
+            description: 'The intent id (8-char hex) to resume. Resolve from list_intents.',
+          },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'swap',
       description:
         "PREPARE a token swap from the user's active wallet on 0G Galileo. This does NOT execute — it stages the swap and the user must tap a Confirm button afterward. Supports wrap (OG → WOG) and unwrap (WOG → OG) today; token-to-token needs a configured DEX. After calling this, tell the user the swap is prepared and ask them to tap Confirm. " +

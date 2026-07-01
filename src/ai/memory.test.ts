@@ -7,7 +7,6 @@
  *   - .env has OG_MEMORY_ENABLED=true and OG_STORAGE_ENABLED=true
  *   - .env has OG_INDEXER_RPC=https://indexer-storage-testnet-turbo.0g.ai
  *   - .env has OG_RPC=https://evmrpc-testnet.0g.ai
- *   - .env has OG_FLOW_CONTRACT set (default works)
  *   - .env has OG_STORAGE_INDEX_PATH set (default '.data/root-index.json' works)
  *   - Operator wallet has testnet OG for gas
  */

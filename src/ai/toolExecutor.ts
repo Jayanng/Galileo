@@ -12,8 +12,19 @@ import {
 import { formatOG } from '../og/chain';
 import { search, getRecentProofs, transactionStats } from './memory';
 import { buildPortfolio } from '../og/portfolio';
-import { getPriceUSD, getPriceByCoinGeckoId, KNOWN_SYMBOLS } from '../og/prices';
+import { getPriceUSD, getPriceByCoinGeckoId, KNOWN_SYMBOLS, SYMBOL_TO_COINGECKO_ID } from '../og/prices';
 import { prepareSwap } from '../swap/swapService';
+import {
+  intentStore,
+  newIntentId,
+  parseSchedule,
+  computeNextRun,
+  summarize,
+  isSupportedDcaPath,
+  type DcaIntent,
+  type AlertIntent,
+} from '../intents';
+import { getActiveId } from '../wallet/activeWallet';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -432,6 +443,217 @@ export async function executeTool(
               'onChainTxCount is the true number of on-chain transactions sent from the user\'s wallets. volumeByUnit covers only bot-recorded sends/swaps.',
           },
         };
+      }
+
+      case 'dca_create': {
+        const fromToken = String(args.fromToken ?? '').toUpperCase().trim();
+        const toToken = String(args.toToken ?? '').toUpperCase().trim();
+        const amount = String(args.amount ?? '').trim();
+        const scheduleStr = String(args.schedule ?? '').trim();
+        const walletId = args.walletId ? String(args.walletId) : undefined;
+        if (!fromToken || !toToken || !amount || !scheduleStr) {
+          const missing = [
+            !fromToken && 'fromToken',
+            !toToken && 'toToken',
+            !amount && 'amount',
+            !scheduleStr && 'schedule',
+          ].filter(Boolean);
+          return {
+            success: false,
+            error: `Missing required field(s): ${missing.join(', ')}. Example call: { fromToken: 'OG', toToken: 'USDC', amount: '1', schedule: 'weekly' }.`,
+          };
+        }
+        const allowedTokens = new Set(['OG', 'WOG', 'USDC', 'USDT']);
+        if (!allowedTokens.has(fromToken) || !allowedTokens.has(toToken)) {
+          return {
+            success: false,
+            error: `Invalid token in DCA path ${fromToken}\u2192${toToken}. fromToken and toToken must each be one of: OG, WOG, USDC, USDT.`,
+          };
+        }
+        if (fromToken === toToken) {
+          return { success: false, error: 'fromToken and toToken must differ.' };
+        }
+        if (!isSupportedDcaPath(fromToken, toToken)) {
+          return {
+            success: false,
+            error: `DCA path ${fromToken}\u2192${toToken} is not supported yet. Supported paths: OG\u2192USDC, OG\u2192USDT, OG\u2192WOG (wrap), WOG\u2192OG (unwrap).`,
+          };
+        }
+        let schedule;
+        try {
+          schedule = parseSchedule(scheduleStr);
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : String(e) };
+        }
+        const wallets = await listWallets(userId);
+        if (wallets.length === 0) {
+          return { success: false, error: 'You have no wallets yet — send /wallet to create one first.' };
+        }
+        let resolvedWalletId = walletId;
+        if (resolvedWalletId && !wallets.find((w) => w.id === resolvedWalletId)) {
+          return { success: false, error: 'walletId does not match any of your wallets.' };
+        }
+        if (!resolvedWalletId) {
+          const active = await getActiveId(userId);
+          resolvedWalletId = active ?? wallets[0]!.id;
+        }
+        const now = Date.now();
+        const intent: DcaIntent = {
+          id: newIntentId(),
+          userId,
+          type: 'dca',
+          status: 'active',
+          fromToken,
+          toToken,
+          amount,
+          schedule,
+          walletId: resolvedWalletId!,
+          nextRunAt: computeNextRun(schedule, now),
+          lastExecutedAt: null,
+          createdAt: now,
+        };
+        await intentStore.add(intent);
+        console.log(`[toolExecutor] dca_create id=${intent.id} ${amount} ${fromToken}\u2192${toToken} ${schedule.raw}`);
+        return {
+          success: true,
+          data: {
+            id: intent.id,
+            type: 'dca',
+            summary: summarize(intent),
+            status: intent.status,
+            schedule: intent.schedule.raw,
+            nextRunAt: new Date(intent.nextRunAt).toISOString(),
+            note: 'No funds have moved yet \u2014 the worker will execute on the next scheduled tick. Use /intents to manage it.',
+          },
+        };
+      }
+
+      case 'alert_create': {
+        const symbolRaw = String(args.symbol ?? '').trim();
+        const operator = String(args.operator ?? '').trim() as '<' | '>' | '<=' | '>=';
+        const threshold = Number(args.threshold);
+        if (!symbolRaw) {
+          return {
+            success: false,
+            error: `Missing required field: symbol. Example call: { symbol: 'OG', operator: '<', threshold: 1 }.`,
+          };
+        }
+        if (!['<', '>', '<=', '>='].includes(operator)) {
+          return {
+            success: false,
+            error: `Invalid operator '${operator}'. Must be one of: '<', '>', '<=', '>='. Example: alert if OG drops below $1 \u2192 { symbol: 'OG', operator: '<', threshold: 1 }.`,
+          };
+        }
+        if (!Number.isFinite(threshold) || threshold <= 0) {
+          return {
+            success: false,
+            error: `Invalid threshold '${args.threshold}'. Must be a positive number (USD). Example: { symbol: 'OG', operator: '<', threshold: 1 }.`,
+          };
+        }
+        const upper = symbolRaw.toUpperCase();
+        const lower = symbolRaw.toLowerCase();
+        const knownId = SYMBOL_TO_COINGECKO_ID[upper];
+        let coingeckoId: string | null = knownId ?? null;
+        if (!coingeckoId && !['USDC', 'USDT'].includes(upper)) {
+          const probe = await getPriceUSD(upper);
+          if (probe !== null) coingeckoId = SYMBOL_TO_COINGECKO_ID[upper] ?? lower;
+          else {
+            const cg = await getPriceByCoinGeckoId(lower);
+            if (cg !== null) coingeckoId = lower;
+          }
+        }
+        if (!coingeckoId) {
+          return {
+            success: false,
+            error: `Could not resolve symbol "${symbolRaw}" to a known token. Use one of: ${KNOWN_SYMBOLS.join(', ')} \u2014 or pass a CoinGecko ID like 'bitcoin', 'ethereum', 'solana'.`,
+          };
+        }
+        const intent: AlertIntent = {
+          id: newIntentId(),
+          userId,
+          type: 'alert',
+          status: 'active',
+          symbol: upper,
+          coingeckoId,
+          operator,
+          threshold,
+          lastCheckedAt: null,
+          firedAt: null,
+          createdAt: Date.now(),
+        };
+        await intentStore.add(intent);
+        console.log(`[toolExecutor] alert_create id=${intent.id} ${upper} ${operator} $${threshold}`);
+        return {
+          success: true,
+          data: {
+            id: intent.id,
+            type: 'alert',
+            summary: summarize(intent),
+            status: intent.status,
+            symbol: intent.symbol,
+            operator: intent.operator,
+            threshold: intent.threshold,
+            note: 'The worker checks the price on every tick (~30s). Use /intents to manage it.',
+          },
+        };
+      }
+
+      case 'list_intents': {
+        const intents = await intentStore.listForUser(userId);
+        return {
+          success: true,
+          data: {
+            count: intents.length,
+            intents: intents.map((i) => ({
+              id: i.id,
+              type: i.type,
+              summary: summarize(i),
+              status: i.status,
+              ...(i.type === 'dca'
+                ? { schedule: i.schedule.raw, nextRunAt: new Date(i.nextRunAt).toISOString(), lastExecutedAt: i.lastExecutedAt ? new Date(i.lastExecutedAt).toISOString() : null }
+                : { symbol: i.symbol, operator: i.operator, threshold: i.threshold, firedAt: i.firedAt ? new Date(i.firedAt).toISOString() : null }),
+            })),
+          },
+        };
+      }
+
+      case 'cancel_intent': {
+        const id = String(args.id ?? '').trim();
+        if (!id) return { success: false, error: 'id is required.' };
+        const existing = await intentStore.get(id);
+        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
+        const ok = await intentStore.remove(id);
+        if (!ok) return { success: false, error: 'could not remove intent.' };
+        console.log(`[toolExecutor] cancel_intent id=${id} type=${existing.type}`);
+        return { success: true, data: { cancelled: true, id, type: existing.type, summary: summarize(existing) } };
+      }
+
+      case 'pause_intent': {
+        const id = String(args.id ?? '').trim();
+        if (!id) return { success: false, error: 'id is required.' };
+        const existing = await intentStore.get(id);
+        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
+        if (existing.status === 'paused') {
+          return { success: true, data: { id, status: 'paused', note: 'already paused' } };
+        }
+        const updated = await intentStore.update(id, { status: 'paused' });
+        if (!updated) return { success: false, error: 'could not pause intent.' };
+        console.log(`[toolExecutor] pause_intent id=${id} type=${existing.type}`);
+        return { success: true, data: { id, status: 'paused', summary: summarize(updated) } };
+      }
+
+      case 'resume_intent': {
+        const id = String(args.id ?? '').trim();
+        if (!id) return { success: false, error: 'id is required.' };
+        const existing = await intentStore.get(id);
+        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
+        if (existing.status === 'active') {
+          return { success: true, data: { id, status: 'active', note: 'already active' } };
+        }
+        const updated = await intentStore.update(id, { status: 'active' });
+        if (!updated) return { success: false, error: 'could not resume intent.' };
+        console.log(`[toolExecutor] resume_intent id=${id} type=${existing.type}`);
+        return { success: true, data: { id, status: 'active', summary: summarize(updated) } };
       }
 
       case 'swap': {

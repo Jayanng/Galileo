@@ -473,6 +473,44 @@ export const toolDefinitions: ChatTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'explain_contract',
+      description:
+        'Read-only lookup of what a 0G/EVM address represents on-chain. Returns: known alias (if it matches a deployed WOG/USDC/USDT/DEX contract), whether the address has any bytecode (EOA vs contract), and ERC-20 metadata (name/symbol/decimals) if readable. Never sends funds, never modifies state — use this ONLY to answer questions, never as a green light to send or swap to an address.',
+      parameters: {
+        type: 'object',
+        properties: {
+          address: {
+            type: 'string',
+            description:
+              'A 0x... EVM address (42 chars, lowercase or checksummed). EOA wallets return "no contract code at this address".',
+          },
+        },
+        required: ['address'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'explain_transaction',
+      description:
+        'Read-only lookup of what a 0G transaction hash represents on-chain. Returns: status (ok / pending / not-found / invalid-hash / rpc-failure), from/to/value (with receiver alias if it matches one of our deployed WOG/USDC/USDT/DEX contracts), function selector (e.g. 0xa9059cbb -> "ERC-20 transfer") decoded to a plain-English label, and receipt info (success/reverted, gas used, log count, confirmations) for mined txs. Never sends funds, never modifies state -- use this ONLY to answer questions about an existing tx hash, never as a green light to re-send.',
+      parameters: {
+        type: 'object',
+        properties: {
+          hash: {
+            type: 'string',
+            description:
+              'A 0x... EVM transaction hash (66 chars: `0x` + 64 hex). 42-char inputs are addresses, not hashes -- those go to explain_contract.',
+          },
+        },
+        required: ['hash'],
+      },
+    },
+  },
 ];
 
 /**

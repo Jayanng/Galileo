@@ -25,6 +25,8 @@ import {
   type AlertIntent,
 } from '../intents';
 import { getActiveId } from '../wallet/activeWallet';
+import { explainContract } from '../og/contractExplorer';
+import { explainTransaction } from '../og/transactionExplorer';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -667,6 +669,111 @@ export async function executeTool(
         return {
           success: true,
           data: { prepared: true, summary: res.summary, note: 'Tell the user to tap Confirm to execute.' },
+        };
+      }
+
+      case 'explain_contract': {
+        const address = String(args.address ?? '').trim();
+        if (!address) {
+          return { success: false, error: 'address is required (a 0x... EVM address).' };
+        }
+        const info = await explainContract(address);
+        console.log(
+          `[toolExecutor] explain_contract address=${info.address} ` +
+            `isContract=${info.isContract} alias=${info.knownAlias ?? '—'} status=${info.status}`,
+        );
+        // Build an LLM-friendly explanation object. The modelHints block tells
+        // the LLM how to phrase each scenario — we don't try to phrase the
+        // prose ourselves because the LLM does it better in the user's language.
+        const isContractText =
+          info.isContract === true
+            ? 'yes — contract code is deployed at this address'
+            : info.isContract === false
+              ? 'no — no bytecode at this address; this looks like a regular wallet (EOA), not a contract'
+              : 'unknown — the RPC call to inspect this address failed';
+        return {
+          success: true,
+          data: {
+            address: info.address,
+            inputWasValid: info.inputWasValid,
+            status: info.status,
+            isContract: info.isContract,
+            isContractText,
+            knownAlias: info.knownAlias,
+            kind: info.knownKind,
+            notes: info.notes,
+            erc20: info.erc20,
+            // Guidance for the LLM on how to phrase the explanation. Kept as a
+            // structured field rather than free-form prose so the model can
+            // match it to whatever the user asked.
+            modelHints: {
+              ifKnownAliasPresent:
+                "Lead with the known alias — this contract is one we deploy for the bot (WOG/USDC/USDT/router/factory). You can confidently describe its role from the `notes` field.",
+              ifTokenButNotKnown:
+                'A contract with readable ERC-20 metadata exists at this address, but it is NOT in our known-alias list. Report the symbol/name/decimals we found, and tell the user we cannot vouch for what it does beyond its on-chain metadata.',
+              ifNotAContract:
+                "This address has no on-chain code — it looks like a regular wallet, not a contract. Tell the user we couldn't find a contract here, and ask if they meant to ask about one of their own wallets (use list_wallets).",
+              ifRpcFailed:
+                "The RPC call to inspect this address failed. Tell the user you couldn't verify the address right now rather than guessing.",
+              neverEndorse:
+                "Explaining a contract is NOT an endorsement of it. Never say 'this looks safe to use' or 'you can trust this'. If the user wants to send to it, they must still go through the explicit /send flow with Confirm.",
+            },
+          },
+        };
+      }
+
+      case 'explain_transaction': {
+        const hash = String(args.hash ?? '').trim();
+        if (!hash) {
+          return { success: false, error: 'hash is required (a 0x... EVM tx hash, 66 chars: `0x` + 64 hex).' };
+        }
+        const info = await explainTransaction(hash);
+        console.log(
+          `[toolExecutor] explain_transaction hash=${info.hash} ` +
+            `status=${info.status} kind=${info.kind ?? '—'} found=${info.found}`,
+        );
+        return {
+          success: true,
+          data: {
+            hash: info.hash,
+            inputWasValid: info.inputWasValid,
+            status: info.status,
+            found: info.found,
+            blockNumber: info.blockNumber,
+            from: info.from,
+            to: info.to,
+            toAlias: info.toAlias,
+            toKind: info.toKind,
+            valueWei: info.valueWei,
+            valueOG: info.valueOG,
+            nonce: info.nonce,
+            gasLimit: info.gasLimit,
+            gasPrice: info.gasPrice,
+            hasEip1559: info.hasEip1559,
+            data: info.data,
+            dataSize: info.dataSize,
+            functionSelector: info.functionSelector,
+            functionName: info.functionName,
+            kind: info.kind,
+            isContractCreation: info.isContractCreation,
+            receipt: info.receipt,
+            // Guidance for the LLM on how to phrase each scenario. Same shape
+            // pattern as explain_contract's modelHints — keep these short and
+            // scenario-specific so the model can match them to whatever the
+            // user asked.
+            modelHints: {
+              ifSuccess:
+                "Lead with what the tx did (e.g. '1 OG transferred from @X to @Y' or 'Wrapped 0.5 OG → WOG'). Quote the raw hash in backticks and the confirmations count so the user can verify on a block explorer.",
+              ifReverted:
+                "Tell the user the transaction landed on-chain but FAILED (reverted). Quote the raw hash in backticks and remind them gas was still consumed. Never say 'this looks safe' or 'you can trust this'.",
+              ifNotFound:
+                "Tell the user the chain has no record of this hash. They may have pasted the wrong hash, copied something from another chain, or the tx simply hasn't propagated yet. Do NOT invent from/to/value.",
+              ifPending:
+                "Tell the user the tx is in the mempool or just mined but no receipt yet. Suggest they check back in a moment or paste the latest status.",
+              neverEndorse:
+                "Explaining a transaction is NOT an endorsement of it. Surface the raw from/to/value as facts, but the user must still verify on a block explorer before deciding anything. If a tx sends funds to an address you don't recognise, say so plainly, do NOT reassure the user.",
+            },
+          },
         };
       }
 

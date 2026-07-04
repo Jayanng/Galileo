@@ -48,6 +48,8 @@ export const FAQ_TEXT = [
   '• "show my P&L this week"',
   '• "what did I do yesterday?"',
   '• "how many transactions have I done?"',
+  '• "what is 0x…?" or "what token is this contract?" — explains any contract address in plain English',
+  '• "what does this 0x…(64-char) hash mean?" or "explain this tx" — tells you what any on-chain transaction actually did: from, to, value, function (e.g. "ERC-20 transfer"), and whether it succeeded',
   '',
   '─ 4. Scheduled automations (talk them into existence) ─',
   '• *DCA* — recurring swap on a schedule, e.g. "dca 1 OG into USDC weekly". Supported paths: *OG↔USDC*, *OG↔USDT*, *OG↔WOG* (wrap), *WOG↔OG* (unwrap).',

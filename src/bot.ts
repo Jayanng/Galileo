@@ -65,6 +65,7 @@ import {
   handleImportKeyReply,
   handleImportConfirm,
   handleImportCancel,
+  handleImportButton,
 } from './handlers/importHandlers';
 import { importState } from './wallet/import';
 
@@ -193,6 +194,10 @@ export function buildBot(): Bot {
   // 4c3) Import preview inline buttons (Confirm / Cancel)
   bot.callbackQuery('import:confirm', handleImportConfirm);
   bot.callbackQuery('import:cancel', handleImportCancel);
+
+  // 4c4) Home dashboard "Import wallet" button — kicks off the /import
+  //      flow (same handler as the bare /import command, no args).
+  bot.callbackQuery('home:import', handleImportButton);
 
   // 4d) Deterministic swap-phrase matcher: clear "wrap/unwrap/swap <amount> …"
   //     messages stage a swap directly (always shows Confirm), bypassing the

@@ -2,53 +2,62 @@
 
 > **← Back to [README.md](../README.md)** for the project overview, hero pitch, and getting started.
 
-This document is the **detailed usage reference** for Galileo — every command, every natural
-language pattern, and every quick-action button. The README keeps a high-level overview; this
-is where you come when you need the full reference.
+This document is the **detailed usage reference** for Galileo — every command, every
+natural-language pattern, and every quick-action button. The README keeps a high-level
+overview; this is where you come when you need the full reference.
+
+The in-bot **❓ Help** button on `/start` shows a brutally-short version of this same
+information, generated from the same single source (`src/helpContent.ts`), so the two
+can never drift.
 
 ---
 
-## Quick-Action Buttons
+## Dashboard Buttons (`/start`)
 
-After any response, tap the inline buttons:
+From the home dashboard, you can tap:
 
-```
-[💰 Balance] [📬 Addresses] [➕ Wallet] [❓ Help]
-```
-
-- **💰 Balance** — Check all balances
-- **📬 Addresses** — View wallet addresses
-- **➕ Wallet** — Create a new wallet
-- **❓ Help** — Show help with examples
+| Button | What it does |
+|---|---|
+| 📥 Deposit | Show your active wallet's address + QR to receive OG |
+| 📤 Send | Pick `@handle` or `0x…` and an amount; always shows a Confirm button before moving funds |
+| 🔄 Swap | Wrap/unwrap (OG↔WOG) or swap via the DEX (OG↔USDC/USDT) |
+| ⚙️ Settings | Export private key (one-tap hide) or rename the wallet |
+| ➕ New wallet | Generates a fresh wallet; shows the new key + seed phrase once |
+| ⬇️ Import wallet | Bring an existing 0G wallet into Galileo by private key |
+| ❓ Help | Show this guide (compact in-bot version) |
 
 ---
 
 ## Commands (deterministic shortcuts)
 
-For latency-sensitive or guaranteed-execution flows, the bot also accepts explicit commands.
-These bypass the LLM tool-calling layer and always show a Confirm button before anything moves
-on-chain:
+For latency-sensitive or guaranteed-execution flows, the bot also accepts explicit
+commands. These bypass the LLM tool-calling layer and always show a Confirm button
+before anything moves on-chain:
 
 | Command | What it does |
 |---|---|
-| `/portfolio` | All wallets with USD prices + grand total (records a daily snapshot) |
-| `/price <symbol\|coingecko-id>` | Quick USD price lookup (e.g. `/price bitcoin`, `/price USDC`) |
-| `/history [day\|week\|month]` | Portfolio P&L over time from daily snapshots |
-| `/proof` | List your last 10 TEE-verified chats |
-| `/balance` | OG balance for all wallets |
+| `/start` | Open your dashboard |
 | `/wallet` | Create a new wallet |
-| `/address` | List wallet addresses |
+| `/import` (or `/import <key>`) | Import an existing wallet by private key. With no args, runs a guided flow that prompts for the key on the next message |
+| `/address` | Pick a wallet and show its QR |
+| `/balance` | OG balance for every wallet |
 | `/privatekey` | Reveal a wallet's private key (one-tap hide) |
-| `/wrap <amount>` | Wrap OG → WOG |
-| `/unwrap <amount>` | Unwrap WOG → OG |
+| `/send <recipient> <amount>` | Send OG (e.g. `/send @tebasv2 0.1` or `/send 0x… 0.1`) |
+| `/wrap <amount>` | Wrap OG → WOG (e.g. `/wrap 0.1`) |
+| `/unwrap <amount>` | Unwrap WOG → OG (e.g. `/unwrap 0.1`) |
 | `/swap <amount> <FROM> <TO>` | Token swap (e.g. `/swap 0.1 OG USDC`); opens the Swap menu with no args |
-| `/send <recipient> <amount>` | Send OG to `@handle` or `0x...` address |
-| `/intents` | List your DCA + alert intents with Cancel/Pause buttons |
-| `/cancel <id>` | Cancel a scheduled intent by id (or use the inline button) |
-| `/pause <id>` | Pause or resume a scheduled intent by id (or use the inline button) |
+| `/portfolio` | All wallets with USD prices + grand total (records a daily snapshot) |
+| `/price <symbol\|coingecko-id>` | USD price lookup (e.g. `/price OG`, `/price bitcoin`) |
+| `/history [week\|month]` | Portfolio P&L over time from daily snapshots |
+| `/intents` | List DCA + alert intents with Cancel/Pause buttons |
+| `/cancel <id>` | Cancel a scheduled intent by id |
+| `/pause <id>` | Pause or resume a scheduled intent by id |
+| `/proof` | List your last 10 TEE-verified chats |
+| `/help` | Show the compact in-bot command list |
 
-> Deterministic parsing lives in `src/handlers/swapUiHandlers.ts` and
-> `src/handlers/sendUiHandlers.ts`; fuzzy natural-language phrases fall through to the AI agent.
+> Deterministic parsing lives in `src/handlers/swapUiHandlers.ts`,
+> `src/handlers/sendUiHandlers.ts`, and `src/handlers/intentUiHandlers.ts`;
+> fuzzy natural-language phrases fall through to the AI agent.
 
 ---
 
@@ -56,7 +65,7 @@ on-chain:
 
 The AI agent understands your intent from plain English. A non-exhaustive sample:
 
-| You Say | Bot Does |
+| You say | Bot does |
 |---|---|
 | *"create me a wallet"* | Generates a new wallet, shows key + address, prompts for name |
 | *"create a wallet called savings"* | Creates a wallet named "savings" |
@@ -66,21 +75,56 @@ The AI agent understands your intent from plain English. A non-exhaustive sample
 | *"rename my wallet to main"* | Renames the specified wallet |
 | *"what did I do yesterday?"* | Searches permanent memory for yesterday's activity |
 | *"what's my first wallet?"* | Recalls the earliest wallet creation from memory |
-| *"send 0.1 OG to @tebasv2"* | Resolves @tebasv2 to their active wallet and shows a Confirm button |
-| *"/send 0xAbC... 0.1"* | Stages a send to that exact address |
+| *"send 0.1 OG to @tebasv2"* | Resolves `@tebasv2` to their active wallet and shows a Confirm button |
+| *"/send 0xAbC… 0.1"* | Stages a send to that exact address |
 | *"swap 0.1 OG to USDC"* | Stages a token swap and shows a Confirm button |
 | *"wrap 1 OG"* | Stages a wrap (OG → WOG) and shows a Confirm button |
-| *"what's my portfolio worth?"* | Shows all wallets with USD prices + grand total; records a daily snapshot |
+| *"what's my portfolio worth?"* | Shows all wallets with USD prices + grand total |
 | *"how much is bitcoin?"* | Quick CoinGecko USD price lookup |
-| *"how many transactions have I done?"* | Returns total tx count, breakdown by type, and total volume per token (via the `transaction_stats` tool) |
-| *"show my P&L this week"* | Renders a daily snapshot table with % change vs the baseline |
+| *"how many transactions have I done?"* | Total tx count, breakdown by type, total volume per token (via `transaction_stats`) |
+| *"show my P&L this week"* | Daily snapshot table with % change vs baseline |
+| *"import this wallet: 0x…"* | Handled by `/import`, not the LLM — keys are never exposed to the agent |
 
 ---
 
-## 🌍 Multi-Language Support
+## Scheduled Automations
 
-Galileo auto-detects and responds in: **English, Pidgin English, Yoruba, Igbo, Hausa, French,
-Spanish, Indonesian, Chinese, Arabic** — and other languages the model can handle.
+Talk them into existence:
+
+- **DCA** — *"dca 1 OG into USDC weekly"*. Recurring swap on schedule.
+  Supported paths: `OG↔USDC`, `OG↔USDT`, `OG↔WOG` (wrap), `WOG↔OG` (unwrap).
+  Bot's worker ticks every 30 s and fires the swap on schedule.
+- **Price alerts** — *"alert me if OG drops below $1"*. One-shot Telegram ping when
+  the price crosses your threshold.
+- **Manage** — `/intents` lists them all with inline Cancel / Pause buttons, or use
+  `/cancel <id>` / `/pause <id>`.
+
+---
+
+## Imports (Private Key)
+
+To bring an existing wallet into Galileo, use `/import`.
+
+- **No-arg form** — `/import` replies with a prompt; send the *private key* as your
+  next message (64 hex chars, with or without `0x` prefix). The bot derives the
+  address, shows a preview with **Confirm** / **Cancel**, and only writes to disk
+  after Confirm.
+- **Inline form** — `/import <key>` shows the preview immediately.
+- **Privacy** — best-effort deletion of the message containing your key (private chats
+  only); the bot will also tell you to delete it manually.
+- **No seed phrase** — imported wallets are inspected against `wallet.createRandom()`,
+  so `encMnemonic` is intentionally absent. Back up via `/privatekey` for a paper
+  recovery word list.
+- **No LLM exposure** — `/import` is a command + button flow only; private keys are
+  never sent to the AI agent.
+
+---
+
+## Multi-Language Support
+
+Galileo auto-detects and responds in **English, Pidgin English, Yoruba, Igbo, Hausa,
+French, Spanish, Indonesian, Chinese, Arabic** — and other languages the model can
+handle.
 
 Examples (try these):
 
@@ -90,29 +134,41 @@ Examples (try these):
 - French: `"quel est mon solde?"`
 - Spanish: `"¿cuál es mi saldo?"`
 
-The system prompt in `src/ai/systemPrompt.ts` is multilingual and instructs the agent to
-respond in the user's detected language.
+The system prompt in `src/ai/systemPrompt.ts` is multilingual and instructs the agent
+to respond in the user's detected language.
 
 ---
 
-## 🔒 Private Key
+## Private Key
 
 To view a wallet's private key, ask the bot or use the button. The key is shown with a
 one-tap hide button for security.
 
-- Use `/privatekey` to reveal a wallet's private key
-- Keys are encrypted at rest with **AES-256-GCM** (see `src/wallet/crypto.ts`)
-- The key is shown only via explicit request — never auto-displayed
-- One-tap hide button protects the message from lingering in chat history
+- Use **`/privatekey`** to reveal a wallet's private key.
+- Keys are encrypted at rest with **AES-256-GCM** (see `src/wallet/crypto.ts`).
+- The key is shown only via explicit request — never auto-displayed.
+- One-tap hide button protects the message from lingering in chat history.
 
 ---
 
-## 📬 Wallet Pickers and Confirm Flows
+## Wallet Pickers and Confirm Flows
 
 Many flows open a **wallet picker** (inline buttons with all your wallets) when the bot
 needs to disambiguate which wallet to act on. After a flow stages an action
-(send, swap, wrap, etc.), a **Confirm button** is shown and nothing moves on-chain until
-you tap it. This is the universal pattern for any operation that touches funds.
+(send, swap, wrap, DCA execution, etc.), a **Confirm button** is shown and nothing
+moves on-chain until you tap it. This is the universal pattern for any operation
+that touches funds.
+
+---
+
+## Stay Safe
+
+- 🔐 *Never* share or paste your private key in DMs to anyone but this bot. The bot
+  will never DM you to ask for it.
+- When the bot asks for a private key (only `/import`), delete the message after
+  sending.
+- Every on-chain move (send / swap / wrap) shows a Confirm button.
+- The bot sees everything you write; remember it's stored on 0G Storage forever.
 
 ---
 

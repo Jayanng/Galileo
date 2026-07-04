@@ -60,6 +60,13 @@ import {
   stageSend,
   parseSendText,
 } from './handlers/sendUiHandlers';
+import {
+  handleImportCommand,
+  handleImportKeyReply,
+  handleImportConfirm,
+  handleImportCancel,
+} from './handlers/importHandlers';
+import { importState } from './wallet/import';
 
 export function buildBot(): Bot {
   const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -120,6 +127,19 @@ export function buildBot(): Bot {
     }
   });
 
+  // 1d) Import-key interceptor: when an /import is awaiting a private key
+  //     (from a bare /import), capture the next plain message as the key.
+  //     Commands fall through.
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    if (!userId || !importState.isActive(userId)) return next();
+    if (ctx.message.text.startsWith('/')) {
+      importState.clear(userId);
+      return next();
+    }
+    await handleImportKeyReply(ctx, ctx.message.text);
+  });
+
   // 2) Commands
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
@@ -132,6 +152,7 @@ export function buildBot(): Bot {
   bot.command('unwrap', handleUnwrapCommand);
   bot.command('swap', handleSwapCommand);
   bot.command('send', handleSendCommand);
+  bot.command('import', handleImportCommand);
   bot.command('proof', handleProof);
   bot.command('portfolio', handlePortfolio);
   bot.command('price', handlePrice);
@@ -168,6 +189,10 @@ export function buildBot(): Bot {
 
   // 4c2) Intent list inline buttons (Cancel / Pause / Resume)
   bot.callbackQuery(/^intent:(cancel|pause):[0-9a-fA-F]+$/, handleIntentCallback);
+
+  // 4c3) Import preview inline buttons (Confirm / Cancel)
+  bot.callbackQuery('import:confirm', handleImportConfirm);
+  bot.callbackQuery('import:cancel', handleImportCancel);
 
   // 4d) Deterministic swap-phrase matcher: clear "wrap/unwrap/swap <amount> …"
   //     messages stage a swap directly (always shows Confirm), bypassing the

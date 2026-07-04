@@ -77,9 +77,10 @@ export async function runAgent(
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     // `userContent` is the billable text. For tool-call iterations it's still
     // the original user message — what the user actually asked for.
-    const { message } = await chatVerified(messages, toolDefinitions, {
+    const agentResult = await chatVerified(messages, toolDefinitions, {
       userContent: userMessage,
     });
+    const { message } = agentResult;
 
     // Case A: LLM wants to call one or more tools
     if (message.tool_calls && message.tool_calls.length > 0) {
@@ -107,9 +108,17 @@ export async function runAgent(
         // F1: persist tool call to 0G Storage (best-effort, never throws)
         await recordToolCall(userId, toolName, parsedArgs, result);
 
+        // Condense large tool results to keep token usage bounded.
+        // A single verbose result (e.g. search_history returning 20 entries)
+        // should not balloon the conversation buffer across iterations.
+        const resultStr = JSON.stringify(result);
+        const condensed = resultStr.length > 2000
+          ? resultStr.slice(0, 2000) + `… [truncated, ${resultStr.length - 2000} more chars]`
+          : resultStr;
+
         messages.push({
           role: 'tool',
-          content: JSON.stringify(result),
+          content: condensed,
           tool_call_id: toolCall.id,
         });
       }
@@ -122,14 +131,11 @@ export async function runAgent(
     }
 
     // Case B: LLM produced final text — we're done.
-    // Re-call chatVerified with no tools so we get a fresh completion that
-    // (a) has the ZG-Res-Key header, (b) is what we want to attach a proof to.
-    // Actually: the current `message` IS the final text — re-using the result
-    // above is correct and avoids an extra round-trip. We DO need the
-    // verification metadata though, so we call chatVerified once more with
-    // no tools to get a clean proof for the final assistant message.
-    const finalResult = await chatVerified(messages, undefined, { userContent: userMessage });
-    const finalReply = finalResult.message.content ?? message.content ?? '(no response)';
+    // The chatVerified call above already signed and verified this response.
+    // We reuse its verification metadata directly instead of making a
+    // redundant second call — the chatID, providerAddress, and verified
+    // status from the original response are the canonical proof to surface.
+    const finalReply = message.content ?? '(no response)';
 
     return {
       reply: finalReply,
@@ -140,9 +146,9 @@ export async function runAgent(
         { role: 'user', content: userMessage },
         { role: 'assistant', content: finalReply },
       ],
-      verified: finalResult.verified,
-      chatID: finalResult.chatID,
-      providerAddress: finalResult.providerAddress,
+      verified: agentResult.verified,
+      chatID: agentResult.chatID,
+      providerAddress: agentResult.providerAddress,
     };
   }
 

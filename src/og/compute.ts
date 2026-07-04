@@ -84,6 +84,70 @@ export async function chat(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Concurrency limiter — max 3 concurrent LLM requests to the provider.
+// Prevents overwhelming the provider's rate limit or causing wallet nonce
+// conflicts. Excess requests queue and wait for a slot.
+// ─────────────────────────────────────────────────────────────────────────
+
+const MAX_CONCURRENT = 3;
+let activeRequests = 0;
+const pendingQueue: Array<() => void> = [];
+
+async function acquireSlot(): Promise<void> {
+  if (activeRequests < MAX_CONCURRENT) {
+    activeRequests++;
+    return;
+  }
+  return new Promise((resolve) => {
+    pendingQueue.push(() => {
+      activeRequests++;
+      resolve();
+    });
+  });
+}
+
+function releaseSlot(): void {
+  if (pendingQueue.length > 0) {
+    const next = pendingQueue.shift();
+    next?.();
+  } else {
+    activeRequests--;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Retry helper — exponential backoff for transient failures (429, 5xx).
+// ─────────────────────────────────────────────────────────────────────────
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.ok) return response;
+
+    // Don't retry 400-499 except 429 (rate limit)
+    if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+      return response; // caller will throw with the actual status
+    }
+
+    if (attempt < maxRetries - 1) {
+      const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      console.warn(
+        `[compute] retry ${attempt + 1}/${maxRetries} after ${delay}ms (status ${response.status})`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    } else {
+      return response; // last attempt failed, return the error
+    }
+  }
+  // TypeScript unreachable with `never`, but this keeps TS happy:
+  throw new Error('fetchWithRetry: unreachable');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Verified path: official 0G Compute SDK
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -110,6 +174,10 @@ interface OpenAICompletionBody {
  * If `processResponse` throws, we log a warning and set `verified = null` —
  * the message itself is still returned, but the caller should surface a
  * "verification pending" footer.
+ *
+ * Rate-limit protection:
+ *   - Concurrency limited to MAX_CONCURRENT (3) simultaneous requests.
+ *   - Retries with 1s/2s/4s backoff on 429 (rate limit) and 5xx errors.
  */
 export async function chatVerified(
   messages: ChatMessage[],
@@ -128,24 +196,36 @@ export async function chatVerified(
     return { ...r, chatID: null, providerAddress: null, verified: null };
   }
 
+  // Acquire concurrency slot before any SDK/network calls
+  await acquireSlot();
+  try {
+    return await doChatVerified(messages, tools, opts, providerAddress);
+  } finally {
+    releaseSlot();
+  }
+}
+
+/**
+ * Inner implementation of chatVerified, called inside the concurrency slot.
+ * Extracted so the semaphore logic stays clean.
+ */
+async function doChatVerified(
+  messages: ChatMessage[],
+  tools: ChatTool[] | undefined,
+  opts: VerifiedCallOptions,
+  providerAddress: string,
+): Promise<ChatVerifiedResult> {
   const broker = getBroker();
   const startedAt = Date.now();
 
-  // Resolve endpoint + model for this provider. Cache could help here later;
-  // getServiceMetadata is on-chain read so keep it simple for now.
   console.log(`[compute] getServiceMetadata for ${providerAddress}...`);
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
   console.log(`[compute] endpoint=${endpoint} model=${model} (${Date.now() - startedAt}ms)`);
 
-  // Sign the request with billing headers. content is used to compute the
-  // estimated fee for the request.
   console.log(`[compute] getRequestHeaders...`);
   const headers = await broker.inference.getRequestHeaders(providerAddress, opts.userContent);
   console.log(`[compute] headers obtained (${Date.now() - startedAt}ms acquired)`);
 
-  // We use raw fetch (not the OpenAI SDK) because we need to read the
-  // `ZG-Res-Key` response header. The OpenAI SDK doesn't expose response
-  // headers on the parsed object.
   const fetchHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(headers as unknown as Record<string, string>),
@@ -160,7 +240,9 @@ export async function chatVerified(
 
   const url = `${endpoint}/chat/completions`;
   console.log(`[compute] POST ${url} (${Date.now() - startedAt}ms elapsed)...`);
-  const fetchRes = await fetch(url, { method: 'POST', headers: fetchHeaders, body });
+
+  // Use fetchWithRetry for transient failures
+  const fetchRes = await fetchWithRetry(url, { method: 'POST', headers: fetchHeaders, body });
   console.log(`[compute] response status=${fetchRes.status} (${Date.now() - startedAt}ms elapsed)`);
 
   if (!fetchRes.ok) {

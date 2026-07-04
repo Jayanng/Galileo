@@ -619,42 +619,46 @@ export async function executeTool(
         };
       }
 
-      case 'cancel_intent': {
+      case 'manage_intent': {
         const id = String(args.id ?? '').trim();
+        const action = String(args.action ?? '').trim().toLowerCase();
         if (!id) return { success: false, error: 'id is required.' };
-        const existing = await intentStore.get(id);
-        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
-        const ok = await intentStore.remove(id);
-        if (!ok) return { success: false, error: 'could not remove intent.' };
-        console.log(`[toolExecutor] cancel_intent id=${id} type=${existing.type}`);
-        return { success: true, data: { cancelled: true, id, type: existing.type, summary: summarize(existing) } };
-      }
-
-      case 'pause_intent': {
-        const id = String(args.id ?? '').trim();
-        if (!id) return { success: false, error: 'id is required.' };
-        const existing = await intentStore.get(id);
-        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
-        if (existing.status === 'paused') {
-          return { success: true, data: { id, status: 'paused', note: 'already paused' } };
+        const validActions = ['cancel', 'pause', 'resume'];
+        if (!validActions.includes(action)) {
+          return {
+            success: false,
+            error: `Invalid action '${action}'. Must be one of: cancel, pause, resume. Use list_intents first to find the id.`,
+          };
         }
-        const updated = await intentStore.update(id, { status: 'paused' });
-        if (!updated) return { success: false, error: 'could not pause intent.' };
-        console.log(`[toolExecutor] pause_intent id=${id} type=${existing.type}`);
-        return { success: true, data: { id, status: 'paused', summary: summarize(updated) } };
-      }
-
-      case 'resume_intent': {
-        const id = String(args.id ?? '').trim();
-        if (!id) return { success: false, error: 'id is required.' };
         const existing = await intentStore.get(id);
-        if (!existing || existing.userId !== userId) return { success: false, error: 'intent not found.' };
+        if (!existing || existing.userId !== userId) {
+          return { success: false, error: 'intent not found.' };
+        }
+
+        if (action === 'cancel') {
+          const ok = await intentStore.remove(id);
+          if (!ok) return { success: false, error: 'could not remove intent.' };
+          console.log(`[toolExecutor] manage_intent cancel id=${id} type=${existing.type}`);
+          return { success: true, data: { cancelled: true, id, type: existing.type, summary: summarize(existing) } };
+        }
+
+        if (action === 'pause') {
+          if (existing.status === 'paused') {
+            return { success: true, data: { id, status: 'paused', note: 'already paused' } };
+          }
+          const updated = await intentStore.update(id, { status: 'paused' });
+          if (!updated) return { success: false, error: 'could not pause intent.' };
+          console.log(`[toolExecutor] manage_intent pause id=${id} type=${existing.type}`);
+          return { success: true, data: { id, status: 'paused', summary: summarize(updated) } };
+        }
+
+        // action === 'resume'
         if (existing.status === 'active') {
           return { success: true, data: { id, status: 'active', note: 'already active' } };
         }
         const updated = await intentStore.update(id, { status: 'active' });
         if (!updated) return { success: false, error: 'could not resume intent.' };
-        console.log(`[toolExecutor] resume_intent id=${id} type=${existing.type}`);
+        console.log(`[toolExecutor] manage_intent resume id=${id} type=${existing.type}`);
         return { success: true, data: { id, status: 'active', summary: summarize(updated) } };
       }
 

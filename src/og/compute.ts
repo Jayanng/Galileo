@@ -117,12 +117,13 @@ function releaseSlot(): void {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Retry helper — exponential backoff for transient failures (429, 5xx).
+// On 429, parses the provider's "wait N seconds" hint and sleeps that long.
 // ─────────────────────────────────────────────────────────────────────────
 
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 3,
+  maxRetries = 5,
 ): Promise<Response> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = await fetch(url, options);
@@ -134,9 +135,24 @@ async function fetchWithRetry(
     }
 
     if (attempt < maxRetries - 1) {
-      const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      let delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s, 8s, 16s
+
+      // On 429, parse the provider's "wait N seconds" hint and honour it
+      if (response.status === 429) {
+        try {
+          const body = await response.text();
+          const waitMatch = body.match(/wait\s+(\d+)\s+seconds/i);
+          if (waitMatch) {
+            delay = Math.max(parseInt(waitMatch[1]!, 10) * 1000, 2000);
+          }
+          console.warn(`[compute] 429 rate limit (attempt ${attempt + 1}/${maxRetries}): ${body.slice(0, 200)}`);
+        } catch {
+          // body read failed — fall back to exponential backoff
+        }
+      }
+
       console.warn(
-        `[compute] retry ${attempt + 1}/${maxRetries} after ${delay}ms (status ${response.status})`,
+        `[compute] retry ${attempt + 1}/${maxRetries} after ${Math.round(delay / 1000)}s (status ${response.status})`,
       );
       await new Promise((r) => setTimeout(r, delay));
     } else {
@@ -148,12 +164,117 @@ async function fetchWithRetry(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Token-budget rate limiter — tracks actual token usage over a rolling
+// 60-second window and gates new requests when recent usage approaches
+// the provider's per-minute token limit (default: 2000 tokens/min).
+//
+// This works in concert with fetchWithRetry's 429 handling:
+//   - waitForTokenBudget() runs BEFORE the request to prevent most 429s
+//   - fetchWithRetry handles the ones that slip through (e.g. concurrent)
+// ─────────────────────────────────────────────────────────────────────────
+
+const RATE_LIMIT_TOKENS_PER_MIN = 2000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
+ * Per-user token usage windows.
+ *
+ * Each Telegram user gets an INDEPENDENT 2,000 tokens/min budget. This means
+ * user A's heavy usage does NOT block user B — they have separate buckets.
+ *
+ * The provider's rate limit is shared at the operator-account level, so if
+ * combined usage across all users exceeds 2,000/min, the provider will still
+ * return 429s. Those are handled gracefully by fetchWithRetry's backoff.
+ * But this per-user gate ensures one user can't preemptively block another
+ * from even starting a request.
+ *
+ * Map<userId, Array<usage entries>> — entries are pruned after 60s.
+ * Empty windows are deleted from the map to prevent unbounded growth.
+ */
+const perUserTokenWindows = new Map<string, Array<{ ts: number; tokens: number }>>();
+
+/**
+ * Block until the rolling 60-second token usage for THIS user drops below
+ * the per-user limit. Called before every provider request.
+ *
+ * @param userId  Telegram user ID. When undefined (e.g. startup ping),
+ *                the rate limiter is skipped entirely.
+ */
+async function waitForTokenBudget(userId?: string): Promise<void> {
+  if (!userId) return; // startup/health-check pings skip the gate
+
+  while (true) {
+    const now = Date.now();
+    const window = perUserTokenWindows.get(userId) ?? [];
+
+    // Prune entries older than the window
+    while (window.length > 0 && window[0]!.ts < now - RATE_LIMIT_WINDOW_MS) {
+      window.shift();
+    }
+
+    const used = window.reduce((sum, e) => sum + e.tokens, 0);
+    if (used < RATE_LIMIT_TOKENS_PER_MIN) {
+      // Keep the pruned window up to date
+      if (window.length > 0) perUserTokenWindows.set(userId, window);
+      else perUserTokenWindows.delete(userId);
+      return;
+    }
+
+    // Persist pruned window before sleeping
+    perUserTokenWindows.set(userId, window);
+
+    // Need to wait until the oldest entry expires from the window
+    const oldestTs = window[0]!.ts;
+    const waitMs = Math.max(1000, oldestTs + RATE_LIMIT_WINDOW_MS - now + 500);
+    console.warn(
+      `[compute] rate-limit gate (user=${userId}): ${used}/${RATE_LIMIT_TOKENS_PER_MIN} tokens in last 60s — waiting ${Math.round(waitMs / 1000)}s before next request`,
+    );
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
+/**
+ * Record actual token usage for a specific user after a provider response.
+ * Called from doChatVerified() with response.usage data.
+ *
+ * @param userId  Telegram user ID (or undefined for startup pings)
+ * @param usage   OpenAI usage object from the provider response
+ */
+function recordTokenUsage(userId: string | undefined, usage: OpenAI.Completions.CompletionUsage | undefined): void {
+  if (!usage) return;
+  const tokens = (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0);
+  if (tokens <= 0) return;
+
+  // Startup pings (no userId) don't track against any user's budget
+  if (!userId) {
+    console.log(
+      `[compute] tokens: prompt=${usage.prompt_tokens ?? 0} completion=${usage.completion_tokens ?? 0} total=${tokens} (system, not tracked)`,
+    );
+    return;
+  }
+
+  const window = perUserTokenWindows.get(userId) ?? [];
+  window.push({ ts: Date.now(), tokens });
+  perUserTokenWindows.set(userId, window);
+
+  const rolling = window.reduce((s, e) => s + e.tokens, 0);
+  console.log(
+    `[compute] tokens (user=${userId}): prompt=${usage.prompt_tokens ?? 0} completion=${usage.completion_tokens ?? 0} total=${tokens} | rolling 60s: ${rolling}/${RATE_LIMIT_TOKENS_PER_MIN}`,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Verified path: official 0G Compute SDK
 // ─────────────────────────────────────────────────────────────────────────
 
 interface VerifiedCallOptions {
   /** User-supplied text. Required by getRequestHeaders for fee calculation. */
   userContent?: string;
+  /**
+   * Telegram user ID. Used for per-user rate limiting. When undefined
+   * (e.g. startup ping), the rate limiter is skipped entirely.
+   */
+  userId?: string;
 }
 
 interface OpenAICompletionBody {
@@ -195,6 +316,10 @@ export async function chatVerified(
     const r = await chat(messages, tools);
     return { ...r, chatID: null, providerAddress: null, verified: null };
   }
+
+  // Wait for token-budget before acquiring a concurrency slot, so that
+  // rate-limited requests don't hold a slot while waiting.
+  await waitForTokenBudget(opts.userId);
 
   // Acquire concurrency slot before any SDK/network calls
   await acquireSlot();
@@ -257,6 +382,9 @@ async function doChatVerified(
   const zgResKey = fetchRes.headers.get('ZG-Res-Key');
   const bodyJson = (await fetchRes.json()) as OpenAICompletionBody;
   const chatID = zgResKey ?? bodyJson.id ?? null;
+
+  // Record actual token usage for the rate limiter + log it
+  recordTokenUsage(opts.userId, bodyJson.usage);
 
   // Build usage JSON for the broker's processResponse (fee caching).
   const usage = bodyJson.usage;

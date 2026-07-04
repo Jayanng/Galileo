@@ -79,6 +79,7 @@ export async function runAgent(
     // the original user message — what the user actually asked for.
     const agentResult = await chatVerified(messages, toolDefinitions, {
       userContent: userMessage,
+      userId,
     });
     const { message } = agentResult;
 

@@ -245,21 +245,10 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
         return true;
       });
 
-      const recentLines = filtered.slice(0, 15).map(formatSearchEntry);
-      const earliestLines = filtered.slice(-3).reverse().map(formatSearchEntry);
+      const recentLines = filtered.slice(0, 5).map(formatSearchEntry);
 
-      if (recentLines.length > 0 || earliestLines.length > 0) {
-        const blocks: string[] = [];
-        if (earliestLines.length > 0) {
-          blocks.push(
-            'EARLIEST INTERACTIONS (your very first chats with this user — use these to answer "what was my first chat?" questions):\n' +
-              earliestLines.join('\n'),
-          );
-        }
-        if (recentLines.length > 0) {
-          blocks.push('RECENT INTERACTIONS (most recent, newest first):\n' + recentLines.join('\n'));
-        }
-        memoryContext = blocks.join('\n\n');
+      if (recentLines.length > 0) {
+        memoryContext = 'RECENT INTERACTIONS (most recent, newest first):\n' + recentLines.join('\n');
       }
     } catch {
       // best-effort — LLM can still call search_history if needed

@@ -392,54 +392,22 @@ export const toolDefinitions: ChatTool[] = [
   {
     type: 'function',
     function: {
-      name: 'cancel_intent',
+      name: 'manage_intent',
       description:
-        'Permanently cancel a scheduled intent. IRREVERSIBLE. Call list_intents first.',
+        'Cancel, pause, or resume a scheduled intent. Call list_intents first to find the id.',
       parameters: {
         type: 'object',
         properties: {
           id: {
             type: 'string',
-            description: 'The intent id (8-char hex) to permanently remove.',
+            description: 'The intent id (8-char hex). Call list_intents first.',
           },
-        },
-        required: ['id'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'pause_intent',
-      description:
-        'Pause a scheduled intent. Reversible with resume_intent. Call list_intents first.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: {
+          action: {
             type: 'string',
-            description: 'The intent id (8-char hex) to pause.',
+            description: '"cancel" (permanent, irreversible), "pause" (reversible), or "resume" (un-pause).',
           },
         },
-        required: ['id'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'resume_intent',
-      description:
-        'Resume a previously paused intent. Call list_intents first for the ID.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            description: 'The intent id (8-char hex) to resume.',
-          },
-        },
-        required: ['id'],
+        required: ['id', 'action'],
       },
     },
   },

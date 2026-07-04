@@ -40,9 +40,7 @@ WHAT YOU CAN DO (via tools)
 - dca_create: Create a DCA (Dollar-Cost Averaging) intent — a recurring swap of a fixed amount on a schedule. The user does NOT tap Confirm; the bot's worker fires the swap automatically on schedule.
 - alert_create: Create a one-shot price alert. Fires once when a token crosses a USD threshold, then sends the user a Telegram message.
 - list_intents: List all of the user's DCA + alert intents with id, type, summary, status, schedule.
-- cancel_intent: Permanently delete an intent by id. Use list_intents first to find the id.
-- pause_intent: Pause an intent (skip it on every tick) without deleting it. Use list_intents first to find the id.
-- resume_intent: Resume a previously paused intent. Use list_intents first to find the id.
+- manage_intent: Cancel, pause, or resume a scheduled intent. Call list_intents first to find the id.
 - explain_contract: Read-only lookup of what a 0G/EVM address represents on-chain. Reports the contract code presence and ERC-20 metadata; does NOT initiate any send/swap. Never use this as a justification to send funds — explaining a contract is not an endorsement.
 - explain_transaction: Read-only lookup of what a 0G transaction hash represents on-chain. Reports tx status (ok / pending / not-found / invalid-hash / rpc-failure), from/to/value, function selector decoded to a plain-English label, and receipt info (success/reverted, gas used, logs, confirmations). Does NOT send anything; never re-send a tx for the user.
 
@@ -72,9 +70,9 @@ Use the correct tool based on context. Never guess — pick the most specific to
 | "dca X into Y", "dollar-cost average", "recurring swap", "swap X every N units" | dca_create | swap (dca creates a SCHEDULED recurring swap, swap is one-shot with Confirm) |
 | "alert me if X drops below", "notify me when X crosses", "tell me if X is under" | alert_create | get_price (alert fires later when condition met; get_price just shows current price) |
 | "show my intents", "list my DCAs", "what alerts do I have", "what schedules are active" | list_intents | get_portfolio (intents is about SCHEDULED actions, not current holdings) |
-| "cancel my DCA", "stop that alert", "delete intent" | cancel_intent | list_intents (cancel removes it; list just shows) |
-| "pause my DCA", "hold off on that", "stop that schedule" | pause_intent | cancel_intent (pause is reversible; cancel is destructive) |
-| "resume my DCA", "unpause that alert", "start that schedule again" | resume_intent | pause_intent (resume UN-pauses; pause pauses) |
+| "cancel my DCA", "stop that alert", "delete intent" | manage_intent(action="cancel") | list_intents (cancel removes it; list just shows) |
+| "pause my DCA", "hold off on that", "stop that schedule" | manage_intent(action="pause") | manage_intent(action="cancel") (pause is reversible; cancel is destructive) |
+| "resume my DCA", "unpause that alert", "start that schedule again" | manage_intent(action="resume") | manage_intent(action="pause") (resume UN-pauses; pause pauses) |
 | "what is 0x...", "explain this contract", "what contract is this", "identify this address", "what token is 0x...", "is this a known token" | explain_contract | swap (explaining ≠ preparing a swap); get_price (price ≠ identity); get_balance (balance ≠ identity) |
 | "what is this tx", "explain this transaction", "decode this hash", "what did this 0x... do", "what does this 66-char hash mean" | explain_transaction | explain_contract (that's for 42-char addresses, not 66-char hashes); search_history (history is for YOUR past activity, not arbitrary on-chain txs) |
 

@@ -41,7 +41,7 @@ for (const f of files) {
   //   test-help-*         — src/helpContent.ts SSOT rendering
   //   test-bot-*          — src/bot.ts callback wiring (text + tsx for safety)
   //   test-tool-*         — src/ai/toolExecutor.ts case-shape inspection
-  const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-)/.test(f);
+  const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-)/.test(f);
   const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
   const tsxPath = join(here, 'node_modules', '.bin', tsxBin);
   const cmd = useTsx ? tsxPath : 'node';

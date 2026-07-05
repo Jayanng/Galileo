@@ -64,6 +64,10 @@ function statusBadge(status: string): string {
   const map: Record<string, string> = {
     ok: 'badge-ok', success: 'badge-ok', active: 'badge-ok', verified: 'badge-ok',
     executed: 'badge-ok', pass: 'badge-ok',
+    // nft_mint receipts carry status='minted' (on-chain success). Add it to
+    // the green "ok" class so it doesn't fall through to the misleading
+    // grey "pending" badge.
+    minted: 'badge-ok',
     fired: 'badge-warn', pending: 'badge-pending', staged: 'badge-pending',
     paused: 'badge-warn', cancelled: 'badge-warn', fail: 'badge-fail',
     failed: 'badge-fail', error: 'badge-fail',
@@ -77,7 +81,12 @@ function fmtTs(ts: number): string {
   return new Date(ts).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
 
-function renderReceipt(r: IntentReceipt): string {
+/**
+ * Pure function — exported so unit tests can assert on the rendered HTML
+ * without spinning up the HTTP server or mocking 0G Storage. The public
+ * verifyPage() routes through this same function for any recovered receipt.
+ */
+export function renderReceipt(r: IntentReceipt): string {
   const typeIcon =
     r.actionType === 'send' ? '📤' :
     r.actionType === 'swap' ? '🔄' :
@@ -117,6 +126,24 @@ function renderReceipt(r: IntentReceipt): string {
             : r.actionType === 'key_reveal'
               ? renderKeyRevealParsed(r)
               : '<div class="muted">Unknown action type.</div>';
+  // nft_mint is automatic — the Parsed Intent card is fully omitted; the
+  // on-chain tx in "Chain" below is the canonical artifact.
+  const parsedCard =
+    r.actionType === 'nft_mint'
+      ? ''
+      : `<div class="card">
+      <h2>2 · Parsed Intent</h2>
+      <div class="grid">${parsedSection}</div>
+    </div>`;
+  // Render "automatic" instead of the grey "pending" badge for receipts that
+  // are finalized without a user Confirm button — statusBadge() maps
+  // `required:false` to a misleading "pending" badge. Routed through
+  // confirmation.method so any future automatic receipt (nft_mint, dca
+  // execution, alert fire, or a new automatic actionType) gets the right
+  // label without a per-type enumeration update.
+  const isAutoConfirmedReceipt =
+    r.confirmation.method === 'automatic' ||
+    r.confirmation.method === 'automatic_scheduled';
 
   // Optional intent link block (DCA execution / alert fire receipts).
   const intentLinkSection =
@@ -162,10 +189,7 @@ function renderReceipt(r: IntentReceipt): string {
       </div>
     </div>
 
-    <div class="card">
-      <h2>2 · Parsed Intent</h2>
-      <div class="grid">${parsedSection}</div>
-    </div>
+    ${parsedCard}
 
     <div class="card">
       <h2>3 · Risk Checks</h2>
@@ -183,7 +207,7 @@ function renderReceipt(r: IntentReceipt): string {
     <div class="card">
       <h2>5 · Confirmation</h2>
       <div class="grid">
-        <div><span class="muted">Required</span><br>${statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>
+        <div><span class="muted">Required</span><br>${isAutoConfirmedReceipt ? '<strong>automatic</strong>' : statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>
         <div><span class="muted">Method</span><br><strong>${r.confirmation.method}</strong></div>
         <div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>
       </div>

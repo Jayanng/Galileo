@@ -404,6 +404,11 @@ export async function createDcaExecutionReceipt(input: DcaExecutionInput): Promi
     confirmation: {
       required: false,
       method: 'automatic_scheduled',
+      // Auto-scheduled actions have no user Confirm tap, but the F5 pipeline
+      // still observed the on-chain success at a definite moment. Record that
+      // instant so /verify shows a real Confirmed At timestamp (auditors can
+      // compare it against the on-chain block timestamp).
+      confirmedAt: now,
     },
     intentLink: {
       intentId: input.intentId,
@@ -523,6 +528,10 @@ export async function createAlertFireReceipt(input: AlertFireInput): Promise<Cre
     confirmation: {
       required: false,
       method: 'automatic_scheduled',
+      // Same reason as dca.execution: an auto-fired alert has no user Confirm,
+      // but the F5 pipeline observed the fire at a definite moment. Record it
+      // so /verify shows a real Confirmed At timestamp.
+      confirmedAt: now,
     },
     intentLink: {
       intentId: input.intentId,
@@ -681,6 +690,11 @@ export async function createNftMintReceipt(input: CreateNftMintInput): Promise<C
     confirmation: {
       required: false,
       method: 'automatic',
+      // "Confirmation" for an automatic mint is the moment the F5 pipeline
+      // observed the on-chain success — i.e. right after `tx.wait()` resolved.
+      // We record that instant so the receipt has a non-empty Confirmed At cell
+      // and auditors can compare it against the on-chain block timestamp.
+      confirmedAt: now,
     },
     chain: { txHash: input.txHash },
     storage: {},

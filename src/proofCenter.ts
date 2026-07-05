@@ -86,7 +86,7 @@ function fmtTs(ts: number): string {
  * without spinning up the HTTP server or mocking 0G Storage. The public
  * verifyPage() routes through this same function for any recovered receipt.
  */
-export function renderReceipt(r: IntentReceipt): string {
+export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null): string {
   const typeIcon =
     r.actionType === 'send' ? '📤' :
     r.actionType === 'swap' ? '🔄' :
@@ -109,8 +109,15 @@ export function renderReceipt(r: IntentReceipt): string {
   const txLine = r.chain.txHash
     ? `<a href="https://chainscan-galileo.0g.ai/tx/${r.chain.txHash}" target="_blank" class="mono">${redact(r.chain.txHash, 20)}</a>`
     : '<span class="muted">—</span>';
-  const rootLine = r.storage.rootHash
-    ? `<span class="mono">${redact(r.storage.rootHash, 20)}</span>`
+  // The 0G Storage rootHash is the receipt's identity, not its content. The
+  // on-Storage copy never carries its own rootHash (the rootHash IS the hash
+  // of the receipt, so self-reference is meaningless), so for /verify/:root
+  // the URL param is the source of truth. Fall back to r.storage.rootHash
+  // for non-verify flows (e.g. unit tests with hand-built fixtures that
+  // pre-populate it).
+  const displayRootHash = rootHashOverride ?? r.storage.rootHash;
+  const rootLine = displayRootHash
+    ? `<span class="mono">${redact(displayRootHash, 20)}</span>`
     : '<span class="muted">— (not yet uploaded)</span>';
 
   // Action-type-specific "Parsed Intent" section.
@@ -416,6 +423,33 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
     }
   }
 
+  // User-ID fallback: when the user navigates to /verify/<userId>, the user
+  // ID key on Storage holds the F1 memory snapshot (not a receipt), so the
+  // cell would otherwise show "— (not yet uploaded)". Look up the user's most
+  // recent Verified Intent Receipt in the local receiptStore index and use
+  // its real rootHash to download the receipt artifact from Storage. This
+  // way /verify/<userId> always surfaces a real F5 receipt with a real
+  // rootHash when the user has at least one.
+  if (isUserId && (!recovered || !looksLikeReceipt(recovered))) {
+    try {
+      const store = await import('./receipts/receiptStore');
+      const recent = await store.listForUser(input, 1);
+      if (recent.length > 0 && recent[0].rootHash) {
+        const receiptRootHash = recent[0].rootHash;
+        const { downloadByRootHash } = await import('./og/fileStorage');
+        const result = await downloadByRootHash(receiptRootHash);
+        if (result) {
+          recovered = JSON.parse(result);
+          rootHash = receiptRootHash;
+          const r = recent[0];
+          recoverySource = `Local index → 0G Storage (user ${redact(input, 8)}'s most recent ${r.actionType} ${r.status} receipt)`;
+        }
+      }
+    } catch {
+      // non-fatal — fall through to the existing "no data recovered" message
+    }
+  }
+
   const body = html(`Verify ${redact(input, 18)}`, `
     <h1>Receipt Verification</h1>
     <div class="card">
@@ -428,7 +462,7 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
     </div>
     ${recovered ? (
       looksLikeReceipt(recovered)
-        ? renderReceipt(recovered as IntentReceipt)
+        ? renderReceipt(recovered as IntentReceipt, rootHash)
         : `<div class="card"><h2>Recovered Data</h2><pre>${JSON.stringify(recovered, null, 2).slice(0, 4000)}</pre></div>`
     ) : `
     <div class="card">

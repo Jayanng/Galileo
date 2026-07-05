@@ -77,6 +77,7 @@ const nftMintFixture = {
   confirmation: {
     required: false,
     method: 'automatic',
+    confirmedAt: NFT_TS,
   },
   chain: { txHash: NFT_TX_HASH },
   storage: { rootHash: NFT_ROOT_HASH },
@@ -116,6 +117,13 @@ const dcaExecutedFixture = {
   confirmation: {
     required: false,
     method: 'automatic_scheduled',
+    // Auto-scheduled DCA execution has no user Confirm tap, but the F5
+    // pipeline observed the on-chain success at a definite moment. The
+    // factory sets this with `now` (the moment `emitReceipt` runs, right
+    // after `tx.wait()`). Recording the instant here makes the Confirmed At
+    // cell render a real timestamp on /verify (auditors can compare against
+    // the on-chain block timestamp).
+    confirmedAt: DCA_TS,
   },
   intentLink: { intentId: DCA_INTENT_ID },
   chain: { txHash: DCA_TX_HASH },
@@ -207,10 +215,84 @@ async function runDcaExecuted() {
     assert.equal(html.includes('Intent Link'), true, 'expected the Intent Link section');
     assert.equal(html.includes(DCA_INTENT_ID), true, `expected intentId ${DCA_INTENT_ID} in output`);
   });
+  await t('[dca.executed] Confirmed At cell renders the timestamp (regression guard for the auto_scheduled factory)', () => {
+    // 1700000060000 ms → '2023-11-14 22:14:20 UTC' — check for the date prefix.
+    assert.equal(
+      html.includes('2023-11-14 22:14:20 UTC'),
+      true,
+      'expected the Confirmed At timestamp in output (would fail if createDcaExecutionReceipt dropped confirmedAt)',
+    );
+  });
 }
+
+// ── Root-hash override parameter test (the /verify/:root bug fix) ──────
+//
+// The on-Storage receipt never carries its own rootHash (the rootHash IS the
+// hash of the receipt — self-reference is meaningless). The /verify/:root page
+// passes the URL param as an override to renderReceipt so the Storage cell
+// always shows the canonical rootHash. This fixture has empty `storage`
+// (matching the on-Storage reality) and we verify the override is what's
+// actually rendered.
+async function runRootHashOverride() {
+  const onStorageLike = {
+    ...nftParsed,
+    // Simulate what the on-Storage version actually looks like: storage: {}.
+    storage: {},
+  };
+  const OVERRIDE = '0x' + '99'.repeat(32);
+  const html = renderReceipt(onStorageLike, OVERRIDE);
+  console.log('\nrenderReceipt(nft_mint, override) — fixture 3 (Storage cell fix)');
+  await t('[override] Storage cell shows the override rootHash, not "not yet uploaded"', () => {
+    assert.equal(html.includes(OVERRIDE.slice(0, 20)), true, 'expected the override rootHash to be rendered in the Storage cell');
+    assert.equal(html.includes('not yet uploaded'), false, 'expected no "not yet uploaded" stub when override is provided');
+  });
+  await t('[override] Receipt self-rootHash is NOT rendered (it was empty in the on-Storage version)', () => {
+    // The fixture's own r.storage.rootHash was NFT_ROOT_HASH before we
+    // replaced storage with {}, but the on-Storage version never had it. The
+    // override is what's canonical.
+    assert.equal(html.includes(NFT_ROOT_HASH.slice(0, 20)), false, 'expected the fixture self-rootHash to NOT appear (storage was {} before override)');
+  });
+  await t('[override] Passing no override falls back to the receipt self-rootHash', () => {
+    const fallback = renderReceipt(nftParsed);
+    assert.equal(fallback.includes(NFT_ROOT_HASH.slice(0, 20)), true, 'expected the receipt self-rootHash to appear when no override is passed');
+  });
+  await t('[override] Works the same for dca.executed (parameter is actionType-agnostic)', () => {
+    // send, swap, dca.created, dca.executed, alert.armed, alert.fired all hit
+    // the same emitReceipt() chicken-and-egg and are auto-fixed by the same
+    // parameter. Prove it for the second actionType.
+    const dcaOverride = '0x' + 'aa'.repeat(32);
+    const dcaHtml = renderReceipt(dcaParsed, dcaOverride);
+    assert.equal(
+      dcaHtml.includes(dcaOverride.slice(0, 20)),
+      true,
+      'expected the override rootHash to be rendered in the dca Storage cell',
+    );
+  });
+}
+
+// ── Wire check: prove verifyPage actually plumbs the URL rootHash ──────
+//
+// The renderReceipt-level test above proves the parameter works. But the
+// /verify/:root page would still regress to "not yet uploaded" if someone
+// reverted the one-line `rootHash` argument at the verifyPage call site.
+// Cheap static check on the proofCenter.ts source catches that specific
+// regression with a clear failure message.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const proofCenterSource = readFileSync(join(__dirname, '..', 'src', 'proofCenter.ts'), 'utf8');
+await t('[wire] verifyPage passes rootHash to renderReceipt (regression guard)', () => {
+  assert.equal(
+    proofCenterSource.includes('renderReceipt(recovered as IntentReceipt, rootHash)'),
+    true,
+    'expected verifyPage to call renderReceipt(..., rootHash) — otherwise /verify/:root regresses to "not yet uploaded"',
+  );
+});
 
 await runNftMint();
 await runDcaExecuted();
+await runRootHashOverride();
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) {

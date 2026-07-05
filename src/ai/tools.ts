@@ -70,7 +70,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_wallet_address',
       description:
-        'Get the EVM address of a wallet. Call list_wallets first for the ID.',
+        'Get the EVM address of one wallet. For listing all wallets use list_wallets.',
       parameters: {
         type: 'object',
         properties: {
@@ -199,7 +199,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_wallet_details',
       description:
-        'Details for one wallet: name, address, balance, creation date, age. Call list_wallets first.',
+        'Details for ONE wallet: name, address, balance, creation date, age. For a simple list use list_wallets.',
       parameters: {
         type: 'object',
         properties: {
@@ -230,7 +230,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_wallet_timeline',
       description:
-        'Wallets sorted by creation date ("oldest" or "newest").',
+        'Wallets sorted by creation date ("oldest" or "newest"). For a simple list without dates use list_wallets.',
       parameters: {
         type: 'object',
         properties: {
@@ -248,7 +248,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'reveal_private_key',
       description:
-        '⚠️ Reveal private key. Only when user explicitly asks. Warn user to keep it secret.',
+        '⚠️ Reveal private key. Only when user explicitly asks. For seed phrase use reveal_recovery_phrase.',
       parameters: {
         type: 'object',
         properties: {
@@ -266,7 +266,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'reveal_recovery_phrase',
       description:
-        '⚠️ Reveal BIP-39 seed phrase. Only when user explicitly asks. Warn user to store offline.',
+        '⚠️ Reveal BIP-39 seed phrase. Only when user explicitly asks. For private key use reveal_private_key.',
       parameters: {
         type: 'object',
         properties: {
@@ -302,7 +302,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'transaction_stats',
       description:
-        'On-chain and bot-recorded transaction counts, type breakdown, volume per token.',
+        'On-chain and bot-recorded transaction counts, type breakdown, volume per token. For raw tx details use search_history.',
       parameters: {
         type: 'object',
         properties: {
@@ -321,7 +321,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'dca_create',
       description:
-        'Create a recurring DCA swap. Pairs: OG↔USDC/USDT/WOG. Schedules: daily, weekly, hourly.',
+        'Create a recurring DCA swap. Pairs: OG↔USDC/USDT/WOG. Schedules: daily, weekly, hourly. For one-time swap use swap.',
       parameters: {
         type: 'object',
         properties: {
@@ -355,7 +355,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'alert_create',
       description:
-        'One-shot price alert. Fires when condition is met, status flips to "fired". Supports any CoinGecko ID.',
+        'One-shot price alert. Fires when condition is met. For current price use get_price.',
       parameters: {
         type: 'object',
         properties: {
@@ -381,7 +381,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'list_intents',
       description:
-        'List all scheduled intents (DCAs + alerts) with summary, status, and next run.',
+        'List all scheduled intents (DCAs + alerts). For USD portfolio value use get_portfolio.',
       parameters: {
         type: 'object',
         properties: {},
@@ -416,7 +416,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'swap',
       description:
-        'PREPARE a swap (user must tap Confirm). Supports wrap, unwrap, and DEX routes.',
+        'PREPARE a one-time swap (user must tap Confirm). Supports wrap, unwrap, and DEX routes. For recurring use dca_create.',
       parameters: {
         type: 'object',
         properties: {
@@ -446,7 +446,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'explain_contract',
       description:
-        'Read-only lookup of what a 0G/EVM address represents on-chain. Returns: known alias (if it matches a deployed WOG/USDC/USDT/DEX contract), whether the address has any bytecode (EOA vs contract), and ERC-20 metadata (name/symbol/decimals) if readable. Never sends funds, never modifies state — use this ONLY to answer questions, never as a green light to send or swap to an address.',
+        'Read-only lookup of a 42-char EVM address. Returns alias/bytecode/ERC-20 metadata. For 66-char tx hashes use explain_transaction. Never endorse.',
       parameters: {
         type: 'object',
         properties: {
@@ -465,7 +465,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'explain_transaction',
       description:
-        'Read-only lookup of what a 0G transaction hash represents on-chain. Returns: status (ok / pending / not-found / invalid-hash / rpc-failure), from/to/value (with receiver alias if it matches one of our deployed WOG/USDC/USDT/DEX contracts), function selector (e.g. 0xa9059cbb -> "ERC-20 transfer") decoded to a plain-English label, and receipt info (success/reverted, gas used, log count, confirmations) for mined txs. Never sends funds, never modifies state -- use this ONLY to answer questions about an existing tx hash, never as a green light to re-send.',
+        'Read-only lookup of a 66-char tx hash. Returns status/from/to/value/selector/receipt. For 42-char addresses use explain_contract. Never endorse.',
       parameters: {
         type: 'object',
         properties: {
@@ -484,7 +484,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_profile_nft',
       description:
-        'View your Galileo agent profile NFT. Shows token ID, mint date, wallet count, attributes.',
+        'View your own Galileo agent profile NFT. For community stats use get_leaderboard.',
       parameters: {
         type: 'object',
         properties: {
@@ -501,7 +501,7 @@ export const toolDefinitions: ChatTool[] = [
     type: 'function',
     function: {
       name: 'get_leaderboard',
-      description: 'How many agent profile NFTs exist — shows your rank in the Galileo community.',
+      description: 'How many agent profile NFTs exist — community size. For your own profile use get_profile_nft.',
       parameters: {
         type: 'object',
         properties: {},

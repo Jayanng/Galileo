@@ -352,6 +352,7 @@ Every on-chain action generates a verifiable trail:
 | Action | On-chain Artifact | Explorer | Storage Record |
 |---|---|---|---|
 | **Token transfer** | Tx hash (native OG send) | [ChainScan](https://chainscan-galileo.0g.ai/tx/${TX_HASH}) | `StoredTx` in user snapshot |
+| **Scheduled send** | Tx hash (recurring OG transfer) | [ChainScan](https://chainscan-galileo.0g.ai/tx/${TX_HASH}) | Verified Intent Receipt (`send`) |
 | **Swap (wrap/unwrap)** | Tx hash (WOG deposit/withdraw) | [ChainScan](https://chainscan-galileo.0g.ai/tx/${TX_HASH}) | `StoredTx` in user snapshot |
 | **Swap (DEX)** | Tx hash (router swap) | [ChainScan](https://chainscan-galileo.0g.ai/tx/${TX_HASH}) | `StoredTx` in user snapshot |
 | **Memory snapshot** | Storage root hash | [scan.0g.ai](https://scan.0g.ai) (paste rootHash) | `OG_STORAGE_INDEX_PATH` |
@@ -368,6 +369,7 @@ root*. It is the dominant primitive of Galileo — **no value moves without one.
 |---|---|---|---|
 | `send`, `swap` | stage (pre-Confirm) → finalize (post-tx) | ✅ on finalize | `staged` → `executed` / `cancelled` / `failed` |
 | `dca` | create-and-upload (creation); create-and-upload (each execution) | ✅ both | `created` / `executed` |
+| `send` (scheduled) | create-and-upload (creation); create-and-upload (each execution) | ✅ both | `staged` → `executed` / `cancelled` / `failed` |
 | `alert` | create-and-upload (arming); create-and-upload (fire) | ✅ both | `armed` / `fired` |
 | `key_reveal` | create-and-index (local-only) | ❌ never | `revealed` |
 
@@ -376,13 +378,14 @@ independently recoverable via `/verify/:rootHash` — immune to the rolling memo
 `MAX_ENTRIES` compaction. Key-reveal receipts are deliberately local-only (sensitive metadata
 about key reveals should not live on public immutable storage).
 
-**Parent→child receipt chain (DCA + alerts):** DCA creation and alert arming receipts store
-their `receiptId` on the intent itself (`creationReceiptId`). When the worker executes a DCA
-tick or an alert fires, the execution/fire receipt links back to the creation receipt via
-`intentLink.creationReceiptId` — so a judge can verify the full chain from *"user said 'dca 1
-OG into USDC weekly'"* → *"rule was archived"* → *"each tick executed on 0G Chain"* → *"each
-execution receipt links to the same parent root"*. The Proof Center renders this link at
-`/verify/:root` under "Creation Receipt".
+**Parent→child receipt chain (DCA + scheduled sends + alerts):** DCA creation, send creation,
+and alert arming receipts store their `receiptId` on the intent itself (`creationReceiptId`).
+When the worker executes a DCA tick, a scheduled send, or an alert fires, the execution/fire
+receipt links back to the creation receipt via `intentLink.creationReceiptId` — so a judge
+can verify the full chain from *"user said 'dca 1 OG into USDC weekly'"* or *"user said 'send
+0.1 OG to @alice every day'"* → *"rule was archived"* → *"each tick executed on 0G Chain"* →
+*"each execution receipt links to the same parent root"*. The Proof Center renders this link
+at `/verify/:root` under "Creation Receipt".
 
 **Compute leg on receipts:** DCA creation and alert arming receipts carry a `compute` field
 (`{ provider, verified, chatId }`) when the intent was created via the AI agent path. This is
@@ -395,6 +398,28 @@ also carry `compute: null` today — they are deterministic command flows, not A
 - **Service**: `src/receipts/receiptService.ts` (stage / finalize / emit / cancel / fail)
 - **Index**: `src/receipts/receiptStore.ts` → `OG_RECEIPT_INDEX_PATH` (receiptId → rootHash)
 - **List**: `/receipt` in Telegram; **Verify**: [`/verify/:root`](https://galileo-test.fly.dev/verify/) in any browser
+
+### Scheduled send receipts
+
+Scheduled (recurring) sends follow the same receipt lifecycle as DCA:
+
+- **Creation receipt** (`staged`) — proves the recurring send intent was scheduled with the specified recipient, amount, schedule, and wallet. Uploaded to 0G Storage immediately on scheduling.
+- **Execution receipt** (`executed` / `failed`) — emitted on each automated transfer. Links back to the creation receipt via `creationReceiptId`, forming a parent→child chain.
+- **Cancellation receipt** (`cancelled`) — emitted when the user cancels the recurring send via `/intents` or `/cancel <id>`.
+
+```json
+{
+  "actionType": "send",
+  "status": "executed",
+  "fromAddress": "0x…",
+  "toAddress": "0x…",
+  "amount": "0.1",
+  "asset": "OG",
+  "txHash": "0x…",
+  "schedule": "every 1 day",
+  "intentLink": { "creationReceiptId": "…" }
+}
+```
 
 ### `/proof` command output
 

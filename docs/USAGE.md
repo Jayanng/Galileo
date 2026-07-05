@@ -55,7 +55,7 @@ before anything moves on-chain:
 | `/portfolio` | All wallets with USD prices + grand total (records a daily snapshot) |
 | `/price <symbol\|coingecko-id>` | USD price lookup (e.g. `/price OG`, `/price bitcoin`) |
 | `/history [week\|month]` | Portfolio P&L over time from daily snapshots |
-| `/intents` | List DCA + alert intents with Cancel/Pause buttons |
+| `/intents` | List DCA + send + alert intents with Cancel/Pause buttons |
 | `/cancel <id>` | Cancel a scheduled intent by id |
 | `/pause <id>` | Pause or resume a scheduled intent by id |
 | `/proof` | List your last 10 TEE-verified chats |
@@ -94,6 +94,8 @@ The AI agent understands your intent from plain English. A non-exhaustive sample
 | *"delete my savings wallet"* | Permanently deletes a wallet (requires confirmation) — no `/delete` command, chat only |
 | *"what is this contract? 0x…"* | Explains any contract address: name, token symbol, purpose (via `explain_contract`) |
 | *"what did this transaction do? 0x…"* | Decodes tx calldata: from, to, value, function called, success (via `explain_transaction`) |
+| *"send 1 OG to @alice every day"* | Schedules a recurring transfer to `@alice` — fires automatically on schedule |
+| *"recurring send 0.5 OG to 0x… weekly"* | Schedules a recurring transfer to an arbitrary address |
 | *"how many Galileo users are there?"* | Community leaderboard / total unique users (via `get_leaderboard`) |
 | *"sort my wallets by oldest first"* | Timeline of wallet creation dates (via `get_wallet_timeline`) |
 | *"what's my total OG across all wallets?"* | Sums OG balances across all wallets (via `get_total_og`) |
@@ -108,9 +110,12 @@ Talk them into existence:
 - **DCA** — *"dca 1 OG into USDC weekly"*. Recurring swap on schedule.
   Supported paths: `OG↔USDC`, `OG↔USDT`, `OG↔WOG` (wrap), `WOG↔OG` (unwrap).
   Bot's worker ticks every 30 s and fires the swap on schedule.
+- **Scheduled Sends** — *"send 0.1 OG to @alice every day"* or *"recurring send 1 OG to 0x… weekly"*.
+  Recurring OG transfers on schedule. Recipients can be `@username` or `0x…` addresses.
+  Each automated execution emits a Verified Intent Receipt with the tx hash.
 - **Price alerts** — *"alert me if OG drops below $1"*. One-shot Telegram ping when
   the price crosses your threshold.
-- **Manage** — `/intents` lists them all with inline Cancel / Pause buttons, or use
+- **Manage** — `/intents` lists them all (DCA + sends + alerts) with inline Cancel / Pause buttons, or use
   `/cancel <id>` / `/pause <id>`.
 
 ---

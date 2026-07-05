@@ -80,6 +80,7 @@ So 0G is not a feature of Galileo. **0G is the precondition for any sensitive ac
 | **AI send** | Users trust mutable bot logs. | TEE-verified intent and public receipt. |
 | **Swap** | Opaque AI suggestion and tx. | Verified route, user confirmation, archived receipt, tx link. |
 | **DCA** | Trust a centralized scheduler. | Verifiable autonomous execution receipts. |
+| **Scheduled Sends** | Trust a centralized scheduler. | Verifiable recurring transfer receipts. |
 | **Memory** | Mutable database history. | Permanent audit history on 0G Storage with redaction/encryption. |
 | **Recovery** | Server-dependent records. | Rebuild audit trail from Storage roots. |
 | **Audit** | Screenshots or private logs. | Public root-hash verification. |
@@ -88,7 +89,7 @@ So 0G is not a feature of Galileo. **0G is the precondition for any sensitive ac
 
 - **Every word, verified** — every AI reply is signed by a hardware enclave (TEE) on 0G
   Compute. The proof lives on-chain. Tap `/proof` to see your last 10 verified chats.
-- **Every action, receipted** — send, swap, DCA, alert, and key-reveal each emit a
+- **Every action, receipted** — send, swap, DCA, scheduled send, alert, and key-reveal each emit a
   Verified Intent Receipt (F5) that lives on 0G Storage under its own root hash.
 - **Every memory, permanent** — every interaction lives forever on 0G Storage. Ask
   *"what did I do last week?"* and get the right answer — even months later.
@@ -191,18 +192,20 @@ and 7+ more languages):
 - Rename wallets anytime
 - View private keys securely (one-tap hide)
 
-### ⏰ Scheduled Intents (DCA + Alerts)
+### ⏰ Scheduled Intents (DCA + Sends + Alerts)
 
 Set-and-forget money habits, just by talking:
 
 ```
-"dca 1 OG into USDC weekly"          → weekly swap on schedule
-"alert me if OG drops below $1"      → Telegram ping when price hits
+"dca 1 OG into USDC weekly"              → weekly swap on schedule
+"send 0.1 OG to @alice every day"        → recurring transfer on schedule
+"alert me if OG drops below $1"          → Telegram ping when price hits
 ```
 
 - **DCA** — *"dca X <from> into <to> every <schedule>"*. Bot's worker ticks every 30s. Each scheduled swap fires automatically and emits a Verified Intent Receipt that links back to the original creation receipt — proving the rule was set up correctly *and* executed exactly as intended. (See [Verifiable DCA on 0G](#verifiable-dca-on-0g) below.)
+- **Scheduled Sends** — *"send X OG to <recipient> every <schedule>"* or *"recurring send X OG to <recipient> <schedule>"*. Recurring transfers that fire on schedule, with execution receipts for every automated payment. Recipients can be `@username` or `0x…` addresses.
 - **Alerts** — *"alert me if <symbol> goes <operator> <price>"*. Fires once when met.
-- **Manage** — `/intents`, `/cancel`, `/pause` with inline buttons.
+- **Manage** — `/intents`, `/cancel`, `/pause` with inline buttons. 
 
 ### 🔄 Verifiable DCA on 0G
 
@@ -340,14 +343,14 @@ for the layered architecture diagram and design rationale.
 
 ### 🤖 AI Tools (the depth under the hood)
 
-The agent exposes **23 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
+The agent exposes **24 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 `src/ai/toolExecutor.ts`. Grouped by area:
 
 - **Wallet CRUD** — `create_wallet`, `list_wallets`, `get_balance`, `get_wallet_address`,
   `get_wallet_details`, `get_wallet_timeline`, `get_total_og`, `rename_wallet`, `delete_wallet`
 - **Portfolio + pricing** — `get_portfolio`, `get_price`, `transaction_stats`
 - **Memory + proofs** — `search_history`, `get_proofs`
-- **Scheduled intents** — `dca_create`, `alert_create`, `list_intents`, `manage_intent`
+- **Scheduled intents** — `dca_create`, `send_schedule_create`, `alert_create`, `list_intents`, `manage_intent`
   (one tool handling `cancel` / `pause` / `resume`)
 - **Swaps** — `swap` (stages a wrap/unwrap or DEX swap; never executes without Confirm)
 - **On-chain explainers (read-only)** — `explain_contract`, `explain_transaction`
@@ -581,7 +584,7 @@ src/
 │
 ├── ai/
 │   ├── agent.ts              # Tool-calling agent loop (max 3 iterations)
-│   ├── tools.ts              # Tool definitions (23 tools)
+│   ├── tools.ts              # Tool definitions (24 tools)
 │   ├── toolExecutor.ts       # Dispatches LLM tool calls to services
 │   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
 │   ├── memory.ts             # F1: permanent memory (0G Storage snapshots)
@@ -590,12 +593,12 @@ src/
 ├── analytics/
 │   └── snapshot.ts           # Daily portfolio snapshots (local file, /history backend)
 │
-├── intents/                  # Scheduled intents subsystem (DCA + price alerts)
+├── intents/                  # Scheduled intents subsystem (DCA + sends + price alerts)
 │   ├── index.ts              # Barrel export
-│   ├── types.ts              # DcaIntent / AlertIntent types
+│   ├── types.ts              # DcaIntent / SendIntent / AlertIntent types
 │   ├── intentStore.ts        # Intent persistence (local + optional 0G Storage)
 │   ├── schedule.ts           # Schedule parsing + next-run computation
-│   ├── executor.ts           # Executes a due DCA / evaluates an alert
+│   ├── executor.ts           # Executes a due DCA / scheduled send / evaluates an alert
 │   └── worker.ts             # 30s polling worker (startIntentWorker)
 │
 ├── handlers/
@@ -673,7 +676,7 @@ scripts/
 | **Wallet Import** Bring an existing wallet via private key (`/import`, Confirm-gated) | ✅ Complete |
 | **On-Chain Explainers** `explain_contract` + `explain_transaction` read-only lookups | ✅ Complete |
 | **Username Registry Persistence** | ✅ Complete (in-memory + optional 0G Storage layer, gated by `OG_STORAGE_ENABLED`) |
-| **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 4 AI tools; ticks every 30s, survives restarts via 0G Storage) |
+| **Scheduled Intents** DCA + recurring sends + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 5 AI tools; ticks every 30s, survives restarts via 0G Storage) |
 | **Profile NFT** Soulbound ERC-721 per user (`GALPRO`), auto-mint on first wallet | ✅ Complete |
 | **Proof Center** Web-verifiable audit dashboard at `/proofs`, `/status`, `/intents/live`, `/verify/:root` | ✅ Complete |
 | **F6** Smart Link / Action Generator | ⏳ Planned (must emit a verifiable receipt) |
@@ -682,7 +685,7 @@ scripts/
 | **Multi-Agent Sub-Personalities** — Trader/Analyst/Security/Tax modes with auto-routing | ⏳ Planned (every agent turn must remain TEE-attested) |
 | **Voice Messages** — Talk instead of typing | ⏳ Planned |
 | **Family & Group Wallets** — Shared wallets for family and groups | ⏳ Planned (must preserve per-user receipts) |
-| **Smart Savings Plans** — Automated recurring savings by talking | ⏳ Planned (extends the DCA primitive) |
+| **Smart Savings Plans** — Automated recurring savings by talking | ✅ Complete (scheduled sends — recurring OG transfers by chat) |
 | **Multi-Chain Support** — Send money across different networks | ⏳ Planned (receipts must remain 0G Storage-rooted) |
 | **Personal AI Tips** — Gentle spending and usage insights | ⏳ Planned |
 

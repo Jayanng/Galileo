@@ -34,14 +34,16 @@ for (const f of files) {
   // resolution + parameter-property support; plain node strip-only mode can't
   // handle those. Detect by filename prefix and route through the local tsx
   // binary directly (avoids `npx` resolution flakiness in spawned processes).
-  // prefixes cover:
-  //   test-intent-*       — intent store / worker / parser / handlers
-  //   test-contract-*     — src/og/contractExplorer.ts (ethers mocking)
-  //   test-transaction-*  — src/og/transactionExplorer.ts (ethers mocking)
-  //   test-help-*         — src/helpContent.ts SSOT rendering
-  //   test-bot-*          — src/bot.ts callback wiring (text + tsx for safety)
-  //   test-tool-*         — src/ai/toolExecutor.ts case-shape inspection
-  const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-)/.test(f);
+// prefixes cover:
+//   test-intent-*       — intent store / worker / parser / handlers
+//   test-contract-*     — src/og/contractExplorer.ts (ethers mocking)
+//   test-transaction-*  — src/og/transactionExplorer.ts (ethers mocking)
+//   test-help-*         — src/helpContent.ts SSOT rendering
+//   test-bot-*          — src/bot.ts callback wiring (text + tsx for safety)
+//   test-tool-*         — src/ai/toolExecutor.ts case-shape inspection
+//   test-verify-        — src/proofCenter.ts rendering
+//   test-receipt-       — src/receipts/* + proofCenter rendering
+const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-|test-receipt-)/.test(f);
   const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
   const tsxPath = join(here, 'node_modules', '.bin', tsxBin);
   const cmd = useTsx ? tsxPath : 'node';

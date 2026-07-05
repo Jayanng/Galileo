@@ -27,7 +27,7 @@ import {
 import { getActiveId } from '../wallet/activeWallet';
 import { explainContract } from '../og/contractExplorer';
 import { explainTransaction } from '../og/transactionExplorer';
-import { createDcaCreationReceipt, createAlertCreationReceipt, type ComputeLeg } from '../receipts';
+import { createDcaCreationReceipt, createAlertCreationReceipt, createCancellationReceipt, type ComputeLeg } from '../receipts';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -676,7 +676,30 @@ export async function executeTool(
           const ok = await intentStore.remove(id);
           if (!ok) return { success: false, error: 'could not remove intent.' };
           console.log(`[toolExecutor] manage_intent cancel id=${id} type=${existing.type}`);
-          return { success: true, data: { cancelled: true, id, type: existing.type, summary: summarize(existing) } };
+          // F5: emit a cancellation receipt so the lifecycle is provable from
+          // 0G Storage root hashes. Best-effort — a receipt upload failure
+          // must never block the cancel from going through.
+          let receiptId: string | null = null;
+          let receiptRootHash: string | null = null;
+          try {
+            const result = await createCancellationReceipt(existing, 'nl');
+            receiptId = result.receiptId;
+            receiptRootHash = result.rootHash;
+          } catch (e) {
+            console.warn(`[toolExecutor] cancellation receipt failed for ${id}:`, (e as Error).message);
+          }
+          return {
+            success: true,
+            data: {
+              cancelled: true,
+              id,
+              type: existing.type,
+              summary: summarize(existing),
+              receiptId,
+              receiptRootHash,
+              note: 'The intent has been permanently removed. No further executions will occur.',
+            },
+          };
         }
 
         if (action === 'pause') {

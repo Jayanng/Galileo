@@ -552,6 +552,166 @@ export async function createAlertFireReceipt(input: AlertFireInput): Promise<Cre
   return emitReceipt(receipt);
 }
 
+// ─── Cancellation receipts (create-and-upload — no staging) ──────────────────
+//
+// When a user cancels a DCA or alert intent, a cancellation receipt is emitted
+// and uploaded to 0G Storage under its own root hash — so an auditor comparing
+// the creation receipt (status=created/armed) against the cancellation receipt
+// (status=cancelled) can verify the full lifecycle from the public root hashes
+// alone. Both link back to the creation receipt via intentLink.creationReceiptId,
+// mirroring how DCA execution receipts link to their parent.
+
+export interface DcaCancellationInput {
+  userId: string;
+  intentId: string;
+  creationReceiptId?: string;
+  fromToken: string;
+  toToken: string;
+  amount: string;
+  scheduleRaw: string;
+  scheduleIntervalMs: number;
+  walletId: string;
+  source: 'command' | 'nl' | 'button';
+}
+
+export async function createDcaCancellationReceipt(input: DcaCancellationInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const checks: RiskCheck[] = [
+    { check: 'intent_found', status: 'pass', ts: now },
+    { check: 'user_confirmed', status: 'pass', ts: now },
+  ];
+  const receipt: DcaReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'dca',
+    userId: input.userId,
+    status: 'cancelled',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: {
+      raw: `Cancel DCA: ${input.amount} ${input.fromToken} → ${input.toToken} (${input.scheduleRaw})`,
+      source: input.source,
+    },
+    parsedIntent: {
+      type: 'dca',
+      fromToken: input.fromToken,
+      toToken: input.toToken,
+      amount: input.amount,
+      scheduleRaw: input.scheduleRaw,
+      scheduleIntervalMs: input.scheduleIntervalMs,
+      walletId: input.walletId,
+    },
+    riskChecks: checks,
+    compute: null,
+    confirmation: {
+      required: true,
+      method: 'telegram_inline_button',
+      confirmedAt: now,
+    },
+    intentLink: {
+      intentId: input.intentId,
+      creationReceiptId: input.creationReceiptId,
+    },
+    chain: {},
+    storage: {},
+  };
+  return emitReceipt(receipt);
+}
+
+export interface AlertCancellationInput {
+  userId: string;
+  intentId: string;
+  creationReceiptId?: string;
+  symbol: string;
+  coingeckoId: string;
+  operator: '<' | '>' | '<=' | '>=';
+  threshold: number;
+  source: 'command' | 'nl' | 'button';
+}
+
+export async function createAlertCancellationReceipt(input: AlertCancellationInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const opWord =
+    input.operator === '<' ? 'below' :
+    input.operator === '>' ? 'above' :
+    input.operator === '<=' ? 'at or below' : 'at or above';
+  const checks: RiskCheck[] = [
+    { check: 'intent_found', status: 'pass', ts: now },
+    { check: 'user_confirmed', status: 'pass', ts: now },
+  ];
+  const receipt: AlertReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'alert',
+    userId: input.userId,
+    status: 'cancelled',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: {
+      raw: `Cancel alert: ${input.symbol} ${opWord} $${input.threshold}`,
+      source: input.source,
+    },
+    parsedIntent: {
+      type: 'alert',
+      symbol: input.symbol,
+      coingeckoId: input.coingeckoId,
+      operator: input.operator,
+      threshold: input.threshold,
+    },
+    riskChecks: checks,
+    compute: null,
+    confirmation: {
+      required: true,
+      method: 'telegram_inline_button',
+      confirmedAt: now,
+    },
+    intentLink: {
+      intentId: input.intentId,
+      creationReceiptId: input.creationReceiptId,
+    },
+    chain: {},
+    storage: {},
+  };
+  return emitReceipt(receipt);
+}
+
+/**
+ * Dispatch to the correct cancellation receipt factory based on intent type.
+ * Best-effort callers wrap this in .catch(() => {}) — a receipt upload failure
+ * must never block the cancel from going through.
+ */
+export async function createCancellationReceipt(
+  intent: import('../intents/types').Intent,
+  source: 'command' | 'nl' | 'button',
+): Promise<CreateResult> {
+  if (intent.type === 'dca') {
+    return createDcaCancellationReceipt({
+      userId: intent.userId,
+      intentId: intent.id,
+      creationReceiptId: intent.creationReceiptId,
+      fromToken: intent.fromToken,
+      toToken: intent.toToken,
+      amount: intent.amount,
+      scheduleRaw: intent.schedule.raw,
+      scheduleIntervalMs: intent.schedule.intervalMs,
+      walletId: intent.walletId,
+      source,
+    });
+  }
+  return createAlertCancellationReceipt({
+    userId: intent.userId,
+    intentId: intent.id,
+    creationReceiptId: intent.creationReceiptId,
+    symbol: intent.symbol,
+    coingeckoId: intent.coingeckoId,
+    operator: intent.operator,
+    threshold: intent.threshold,
+    source,
+  });
+}
+
 // ─── Key-reveal receipt (LOCAL-ONLY — never uploaded to 0G Storage) ──────────
 
 export interface KeyRevealInput {

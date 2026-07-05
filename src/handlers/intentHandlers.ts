@@ -1,5 +1,8 @@
 import { InlineKeyboard, type Context } from 'grammy';
 import { intentStore, summarize } from '../intents';
+import { createCancellationReceipt } from '../receipts';
+
+const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
 
 /**
  * Telegram command + inline-callback handlers for the Scheduled Intents Engine.
@@ -90,7 +93,19 @@ export async function handleCancelCommand(ctx: Context): Promise<void> {
     return;
   }
   await intentStore.remove(id);
-  await ctx.reply(`🗑 Cancelled: ${summarize(existing)}`, { parse_mode: 'Markdown' });
+  // F5: emit a cancellation receipt so the intent lifecycle is provable from
+  // 0G Storage root hashes alone (creation receipt → cancellation receipt).
+  // Await so we can surface the /verify/:root link, matching DCA creation.
+  let receiptLine = '';
+  try {
+    const result = await createCancellationReceipt(existing, 'command');
+    if (result.rootHash) {
+      receiptLine = `\n🧾 Receipt: [0x${result.rootHash.slice(2, 12)}…](${PROOF_VERIFY_URL}${result.rootHash})`;
+    }
+  } catch (e) {
+    console.warn(`[intents] cancellation receipt failed for ${id}:`, (e as Error).message);
+  }
+  await ctx.reply(`🗑 Cancelled: ${summarize(existing)}${receiptLine}`, { parse_mode: 'Markdown' });
 }
 
 export async function handlePauseCommand(ctx: Context): Promise<void> {
@@ -132,6 +147,11 @@ export async function handleIntentCallback(ctx: Context): Promise<void> {
       return;
     }
     await intentStore.remove(id);
+    // F5: emit a cancellation receipt (best-effort). The toast + list re-render
+    // is the primary UX; the receipt is accessible via /receipt and /verify/:root.
+    createCancellationReceipt(existing, 'button').catch((e) =>
+      console.warn(`[intents] cancellation receipt failed for ${id}:`, (e as Error).message),
+    );
     await ctx.answerCallbackQuery({ text: 'Cancelled' });
     // Re-render the list (intent removed) so the message stays consistent.
     const remaining = await intentStore.listForUser(userId);

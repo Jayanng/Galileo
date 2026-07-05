@@ -46,6 +46,8 @@ export const RiskCheckSchema = z.object({
     'no_ai_access',
     // NFT mint
     'wallet_first_creation', 'no_existing_profile', 'metadata_uploaded',
+    // Cancellation (DCA/alert cancel receipts)
+    'intent_found',
   ]),
   status: z.enum(['pass', 'fail', 'pending', 'n/a']),
   ts: z.number().int().nonnegative(),

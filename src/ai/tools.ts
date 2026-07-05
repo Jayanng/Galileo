@@ -51,7 +51,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_balance',
       description:
-        'Get OG balance for one wallet or all wallets. Returns decimal strings.',
+        'Get OG balance (token amount) for one wallet or all wallets. For USD value use get_portfolio.',
       parameters: {
         type: 'object',
         properties: {
@@ -110,7 +110,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'search_history',
       description:
-        'Search past interactions by text query or timeRange (today, yesterday, last7days, last30days).',
+        'Search past interactions (chat, tool calls, transactions). For TEE verification history use get_proofs.',
       parameters: {
         type: 'object',
         properties: {
@@ -149,7 +149,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_proofs',
       description:
-        'Get recent TEE verification proofs with chatID, provider, and status.',
+        'Get recent TEE verification proofs with chatID, provider, and status. For chat history use search_history.',
       parameters: {
         type: 'object',
         properties: {
@@ -167,7 +167,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_portfolio',
       description:
-        'Full portfolio in USD across all wallets with per-wallet breakdown and grand total.',
+        'Full portfolio in USD across all wallets with per-wallet breakdown and grand total. For OG token amounts use get_balance.',
       parameters: {
         type: 'object',
         properties: {},
@@ -180,7 +180,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_price',
       description:
-        'Get USD price for any symbol or CoinGecko ID (OG, BTC, ethereum, etc.).',
+        'Get USD price for any symbol or CoinGecko ID. For your own token balance use get_balance.',
       parameters: {
         type: 'object',
         properties: {
@@ -217,7 +217,7 @@ export const toolDefinitions: ChatTool[] = [
     function: {
       name: 'get_total_og',
       description:
-        'Total OG across all wallets plus wallet count. Always sums everything.',
+        'Total OG across all wallets summed into one number, plus wallet count. For per-wallet breakdown use get_balance.',
       parameters: {
         type: 'object',
         properties: {},

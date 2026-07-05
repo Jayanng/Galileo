@@ -1,10 +1,16 @@
 # Usage Reference
 
-> **← Back to [README.md](../README.md)** for the project overview, hero pitch, and getting started.
+> **← Back to [README.md](../README.md)** for the project overview, hero pitch, and the
+> Verifiable Intent Pipeline.
 
 This document is the **detailed usage reference** for Galileo — every command, every
 natural-language pattern, and every quick-action button. The README keeps a high-level
 overview; this is where you come when you need the full reference.
+
+Galileo is the verifiable AI wallet on 0G. **No value moves without a Verified Intent
+Receipt** — every send, swap, DCA, alert, and key-reveal emits one to 0G Storage, and every
+one ends with a public verification link at [`/verify/:root`](https://galileo-test.fly.dev/verify/).
+The patterns below all ride on that primitive.
 
 The in-bot **❓ Help** button on `/start` shows a brutally-short version of this same
 information, generated from the same single source (`src/helpContent.ts`), so the two
@@ -53,6 +59,7 @@ before anything moves on-chain:
 | `/cancel <id>` | Cancel a scheduled intent by id |
 | `/pause <id>` | Pause or resume a scheduled intent by id |
 | `/proof` | List your last 10 TEE-verified chats |
+| `/receipt` | List your most recent Verified Intent Receipts (send/swap/DCA/alert/key-reveal) with root hashes |
 | `/skip` | Skip the wallet naming prompt (keep current/default name) |
 | `/help` | Show the compact in-bot command list |
 
@@ -173,7 +180,11 @@ Many flows open a **wallet picker** (inline buttons with all your wallets) when 
 needs to disambiguate which wallet to act on. After a flow stages an action
 (send, swap, wrap, DCA execution, etc.), a **Confirm button** is shown and nothing
 moves on-chain until you tap it. This is the universal pattern for any operation
-that touches funds.
+that touches funds — and it is the second leg of the Verifiable Intent Pipeline:
+**intent → TEE-attested parse → risk checks → user confirmation → on-chain tx → 0G Storage receipt → `/verify/:root` link**.
+
+Tap Confirm → the action settles → the reply includes a `🧾 Receipt` link to
+`/verify/:rootHash`. Use `/receipt` to list yours anytime.
 
 ---
 

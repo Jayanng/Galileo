@@ -14,16 +14,21 @@ import {
 import { tokenBalance, tokenMeta, ensureAllowance } from '../og/erc20';
 import { recordTx } from '../ai/memory';
 import { pendingSwaps, type PendingSwap } from './pendingSwap';
+import { stageSwapReceipt, finalizeReceipt, failReceipt, markApprovalOk } from '../receipts';
 
 export interface SwapRequest {
   from: string; // 'OG' | 'WOG' | 0x token address
   to: string;
   amount: string; // human decimal string of the INPUT token
   walletId?: string;
+  rawInput?: string;
+  source?: 'command' | 'nl' | 'button';
 }
 
 export type PrepareResult = { ok: true; summary: string } | { ok: false; error: string };
-export type ExecuteResult = { ok: true; hash: string; summary: string } | { ok: false; error: string };
+export type ExecuteResult =
+  | { ok: true; hash: string; summary: string; receiptId?: string; receiptRootHash?: string | null }
+  | { ok: false; error: string };
 
 const NATIVE_NAMES = new Set(['OG', '0G', 'A0GI', 'NATIVE', 'ETH']);
 const isNative = (t: string): boolean => NATIVE_NAMES.has(t.trim().toUpperCase());
@@ -94,9 +99,16 @@ export async function prepareSwap(userId: string, req: SwapRequest): Promise<Pre
     const bal = await getBalance(wallet.address);
     if (bal < amountWei) return { ok: false, error: `Not enough OG in ${wallet.name} (have ${formatEther(bal)} OG).` };
     const summary = `Wrap *${req.amount} OG* → *${req.amount} WOG*\nWallet: *${wallet.name}*`;
+    const receiptId = stageSwapReceipt({
+      userId, kind: 'wrap', fromToken: 'OG', toToken: 'WOG',
+      amountIn: `${req.amount} OG`, estOut: `${req.amount} WOG`,
+      walletId: wallet.id, walletName: wallet.name,
+      rawInput: req.rawInput, source: req.source ?? 'command',
+    });
     pendingSwaps.set(userId, {
       kind: 'wrap', walletId: wallet.id, walletName: wallet.name, fromSymbol: 'OG', toSymbol: 'WOG',
       amountWei: amountWei.toString(), amountInLabel: `${req.amount} OG`, estOutLabel: `${req.amount} WOG`, summary,
+      receiptId,
     });
     return { ok: true, summary };
   }
@@ -107,9 +119,16 @@ export async function prepareSwap(userId: string, req: SwapRequest): Promise<Pre
     const bal = await tokenBalance(config.WOG_ADDRESS, wallet.address);
     if (bal < amountWei) return { ok: false, error: `Not enough WOG in ${wallet.name} (have ${formatEther(bal)} WOG).` };
     const summary = `Unwrap *${req.amount} WOG* → *${req.amount} OG*\nWallet: *${wallet.name}*`;
+    const receiptId = stageSwapReceipt({
+      userId, kind: 'unwrap', fromToken: 'WOG', toToken: 'OG',
+      amountIn: `${req.amount} WOG`, estOut: `${req.amount} OG`,
+      walletId: wallet.id, walletName: wallet.name,
+      rawInput: req.rawInput, source: req.source ?? 'command',
+    });
     pendingSwaps.set(userId, {
       kind: 'unwrap', walletId: wallet.id, walletName: wallet.name, fromSymbol: 'WOG', toSymbol: 'OG',
       amountWei: amountWei.toString(), amountInLabel: `${req.amount} WOG`, estOutLabel: `${req.amount} OG`, summary,
+      receiptId,
     });
     return { ok: true, summary };
   }
@@ -123,11 +142,12 @@ export async function prepareSwap(userId: string, req: SwapRequest): Promise<Pre
         'You can wrap/unwrap OG↔WOG today.',
     };
   }
-  return prepareDexSwap(userId, wallet, from, to, req.amount, amountWei);
+  return prepareDexSwap(userId, wallet, from, to, req.amount, amountWei, req.rawInput, req.source);
 }
 
 async function prepareDexSwap(
   userId: string, wallet: WalletInfo, from: string, to: string, amountLabel: string, amountWei: bigint,
+  rawInput?: string, source?: 'command' | 'nl' | 'button',
 ): Promise<PrepareResult> {
   const wog = config.WOG_ADDRESS;
   const fromIsNative = isNative(from);
@@ -162,10 +182,21 @@ async function prepareDexSwap(
     `Min received: *${formatEther(minOut)} ${toSym}* (slippage ${config.SWAP_SLIPPAGE_BPS / 100}%)\n` +
     `Wallet: *${wallet.name}*`;
 
+  const approvalNeeded = routeKind !== 'native-to-token';
+  const receiptId = stageSwapReceipt({
+    userId, kind: 'dex', fromToken: fromSym, toToken: toSym,
+    amountIn: `${amountLabel} ${fromSym}`, estOut: `~${formatEther(estOut)} ${toSym}`,
+    walletId: wallet.id, walletName: wallet.name,
+    rawInput, source: source ?? 'command',
+    minOut: formatEther(minOut), slippageBps: config.SWAP_SLIPPAGE_BPS,
+    path, routeKind, approvalNeeded,
+  });
+
   pendingSwaps.set(userId, {
     kind: 'dex', walletId: wallet.id, walletName: wallet.name, fromSymbol: fromSym, toSymbol: toSym,
     amountWei: amountWei.toString(), amountInLabel: `${amountLabel} ${fromSym}`,
     estOutLabel: `~${formatEther(estOut)} ${toSym}`, summary, minOutWei: minOut.toString(), path, routeKind,
+    receiptId,
   });
   return { ok: true, summary };
 }
@@ -178,6 +209,7 @@ export async function executeSwap(userId: string): Promise<ExecuteResult> {
   const signer = await getSigner(userId, p.walletId);
   if (!signer) {
     pendingSwaps.clear(userId);
+    if (p.receiptId) failReceipt(p.receiptId, 'That wallet no longer exists.').catch(() => {});
     return { ok: false, error: 'That wallet no longer exists.' };
   }
 
@@ -199,19 +231,35 @@ export async function executeSwap(userId: string): Promise<ExecuteResult> {
         hash = (await tx.wait())?.hash ?? tx.hash;
       } else if (p.routeKind === 'token-to-native') {
         await ensureAllowance(path[0]!, to, config.DEX_ROUTER_ADDRESS, amountWei, signer);
+        if (p.receiptId) markApprovalOk(p.receiptId);
         const tx = await swapExactTokensForNative(signer, amountWei, minOut, path, to);
         hash = (await tx.wait())?.hash ?? tx.hash;
       } else {
         await ensureAllowance(path[0]!, to, config.DEX_ROUTER_ADDRESS, amountWei, signer);
+        if (p.receiptId) markApprovalOk(p.receiptId);
         const tx = await swapExactTokensForTokens(signer, amountWei, minOut, path, to);
         hash = (await tx.wait())?.hash ?? tx.hash;
       }
     }
     pendingSwaps.clear(userId);
     recordTx(userId, { type: 'swap', amount: p.amountInLabel, from: p.fromSymbol, to: p.toSymbol, hash }).catch(() => {});
-    return { ok: true, hash, summary: p.summary };
+
+    // F5: finalize the Verified Intent Receipt (sets txHash + user_confirmed,
+    // uploads to 0G Storage under receipt:<id>, indexes the rootHash).
+    let receiptRootHash: string | null = null;
+    if (p.receiptId) {
+      try {
+        const finalized = await finalizeReceipt(p.receiptId, hash);
+        receiptRootHash = finalized?.rootHash ?? null;
+      } catch (e) {
+        console.warn(`[swap] receipt finalize failed for ${p.receiptId}:`, (e as Error).message);
+      }
+    }
+
+    return { ok: true, hash, summary: p.summary, receiptId: p.receiptId, receiptRootHash };
   } catch (e) {
     pendingSwaps.clear(userId);
+    if (p.receiptId) failReceipt(p.receiptId, (e as Error).message).catch(() => {});
     return { ok: false, error: (e as Error).message };
   }
 }

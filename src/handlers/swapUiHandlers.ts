@@ -26,9 +26,15 @@ export function swapConfirmKeyboard(): InlineKeyboard {
 export async function stageSwap(
   ctx: Context,
   userId: string,
-  draft: { from: string; to: string; amount: string },
+  draft: { from: string; to: string; amount: string; rawInput?: string; source?: 'command' | 'nl' | 'button' },
 ): Promise<void> {
-  const res = await prepareSwap(userId, { from: draft.from, to: draft.to, amount: draft.amount });
+  const res = await prepareSwap(userId, {
+    from: draft.from,
+    to: draft.to,
+    amount: draft.amount,
+    rawInput: draft.rawInput,
+    source: draft.source,
+  });
   if (!res.ok) {
     await ctx.reply(`⚠️ ${res.error}`);
     return;
@@ -110,7 +116,7 @@ export async function handleSwapAmountReply(ctx: Context, text: string): Promise
     await ctx.reply('That doesn’t look like an amount. Tap 🔄 Swap again and send just a number, e.g. 0.1.');
     return;
   }
-  await stageSwap(ctx, userId, { from: draft.from, to: draft.to, amount: m[1]! });
+  await stageSwap(ctx, userId, { from: draft.from, to: draft.to, amount: m[1]!, source: 'button' });
 }
 
 // ── Commands: /wrap, /unwrap, /swap ──────────────────────────────────────────
@@ -124,7 +130,7 @@ async function runDirection(ctx: Context, from: string, to: string, verb: string
     await ctx.reply(`How much *${from}* to ${verb}? Send an amount, e.g. \`0.1\`.`, { parse_mode: 'Markdown' });
     return;
   }
-  await stageSwap(ctx, userId, { from, to, amount });
+  await stageSwap(ctx, userId, { from, to, amount, rawInput: ctx.message?.text, source: 'command' });
 }
 
 export async function handleWrapCommand(ctx: Context): Promise<void> {
@@ -145,6 +151,8 @@ export async function handleSwapCommand(ctx: Context): Promise<void> {
       amount: parts[0]!,
       from: parts[1]!.toUpperCase(),
       to: parts[2]!.toUpperCase(),
+      rawInput: ctx.message?.text,
+      source: 'command',
     });
     return;
   }

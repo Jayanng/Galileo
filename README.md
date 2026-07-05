@@ -1,20 +1,21 @@
-# 👋 Galileo – Your AI Wallet Friend on Telegram
+# 🛡️ Galileo – The Verifiable AI Wallet on 0G
 
 <div align="center">
 
-### Talk to your wallet like you talk to a friend.
+### Natural-language finance where every intent is TEE-attested, user-confirmed, executed on-chain, and independently auditable from 0G Storage.
 
-**No complicated commands. No confusing buttons.**
-**Just type normal words on your phone and Galileo does the rest.**
+**Galileo is the first verifiable AI wallet.** It is not a Telegram wallet that uses 0G —
+it is a **verifiable intent layer for AI agents that move value.** Every financial action
+travels a single primitive — *intent → TEE-attested parse → risk checks → user confirmation →
+on-chain execution → 0G Storage receipt* — and ends with a **public verification link**,
+not a claim.
 
-Whether you are young or old, new to crypto or experienced — **Galileo is made for you.**
-It feels like your normal daily chats online.
+> **Galileo refuses to move money unless the intent is verifiable.**
 
-Create wallets, check balances, send money, set reminders — all by simple talking.
-
-**Built on 0G so your chat history and memories are saved forever and stay private.**
-
-Safe, fast, and always ready when you need it.
+Talk to it in any language — Yoruba, Pidgin, Igbo, Hausa, French, Spanish, English, and more.
+Create wallets, send, swap, schedule DCAs, arm price alerts — all by talking. But underneath
+the chat surface, **0G is required before any sensitive wallet action can execute**, not
+optional plumbing for memory and AI responses.
 
 ---
 
@@ -26,11 +27,12 @@ Open Telegram, message `@galileoOGbot`, and type:
 create me a wallet
 ```
 
-Your wallet is ready in seconds.
+Then verify the action yourself, in any browser, by root hash:
+[`/verify/:root`](https://galileo-test.fly.dev/verify/).
 
 <!-- TODO: Replace with screenshot of a real Galileo conversation (e.g. "create me a wallet" → response). Save as docs/screenshots/welcome.png or similar. -->
 
-<!-- TODO: Replace with a short GIF or video showing a full Galileo conversation (create wallet → check balance → send → confirm). Save as docs/screenshots/demo.gif or demo.mp4. -->
+<!-- TODO: Replace with a short GIF or video showing a full Galileo conversation ending with a public /verify/:root proof link. Save as docs/screenshots/demo.gif or demo.mp4. -->
 
 ---
 
@@ -54,23 +56,42 @@ Your wallet is ready in seconds.
 
 ## 🌍 Why Galileo Exists
 
-Most wallets ask you to learn a new language: command names, hex addresses, gas fees,
-"approvals," "slippage." **Galileo asks you to just talk.**
+Most AI wallets treat the LLM as a chatbot bolted onto a wallet. **Galileo treats the LLM as
+an agent that moves value — and refuses to do so without a verifiable proof that the user
+actually intended it.**
 
-And it's the only wallet that can credibly do all of this:
+That is a different product. The defining question is not *"does it understand natural language?"*
+(it does), but:
 
-> **A wallet you can talk to in any language — where every word is verified in a TEE and
-> every memory is permanent on 0G Storage. No other stack can credibly offer all three.**
+> **What breaks if 0G is removed?**
 
-- **Talk to it in any language** — Yoruba, Pidgin, Igbo, Hausa, French, Spanish, English,
-  and 3+ more. The first wallet built for the next billion users.
+- **Without 0G Compute's TEE**, the AI's reasoning has no hardware-attested proof. A reply
+  could be tampered with and no one could tell.
+- **Without 0G Chain**, there is no deterministic settlement layer for the executed intent.
+- **Without 0G Storage**, the receipt that proves *intent → parse → confirm → tx* has no
+  immutable home — a judge cannot verify anything from a browser by root hash.
+
+So 0G is not a feature of Galileo. **0G is the precondition for any sensitive action to execute.**
+
+### The winning perception
+
+| Current perception | Winning perception |
+|---|---|
+| A friendly Telegram wallet with AI and 0G integrations. | A verifiable intent layer for AI agents that move value. |
+| 0G helps with memory and AI responses. | 0G is required before sensitive wallet actions can execute. |
+| The demo happens inside Telegram. | A judge can verify public receipts from a browser by root hash. |
+| Lots of wallet features. | One dominant primitive: safe, auditable AI-controlled finance. |
+
+### Why Galileo can credibly claim this
+
 - **Every word, verified** — every AI reply is signed by a hardware enclave (TEE) on 0G
   Compute. The proof lives on-chain. Tap `/proof` to see your last 10 verified chats.
+- **Every action, receipted** — send, swap, DCA, alert, and key-reveal each emit a
+  Verified Intent Receipt (F5) that lives on 0G Storage under its own root hash.
 - **Every memory, permanent** — every interaction lives forever on 0G Storage. Ask
   *"what did I do last week?"* and get the right answer — even months later.
-
-This is what makes Galileo different from Grimoire's more technical, developer-leaning
-positioning. **Galileo is for everyone.**
+- **Talk to it in any language** — Yoruba, Pidgin, Igbo, Hausa, French, Spanish, English,
+  and 3+ more. Built for the next billion users.
 
 ---
 
@@ -78,11 +99,12 @@ positioning. **Galileo is for everyone.**
 
 - **Just chat naturally:** "Create a new savings wallet" or "What's my balance?"
 - **Works in your language** (English, Pidgin, Yoruba, French, and many more).
-- **Remembers everything:** Ask "What did I do last week?" and it tells you.
-- **Safe and simple:** Private keys stay hidden unless you ask.
+- **Remembers everything:** Ask "What did I do last week?" and it tells you — verified.
+- **Safe by default:** Private keys never reach the LLM. Sensitive actions require an
+  explicit Confirm button before anything moves on-chain.
 - **Runs on your phone** — no new apps to learn.
 
-**Galileo turns crypto into something simple and fun, like sending a normal message.**
+**Underneath the chat surface, every action ends in a public verification link, not a claim.**
 
 ---
 
@@ -91,8 +113,8 @@ positioning. **Galileo is for everyone.**
 Forget confusing websites and scary errors. Galileo removes the hard parts:
 
 - **No need to copy long addresses.** Send money with a Telegram `@username`.
-- **No fear of losing your history** — everything is saved safely on 0G.
-- **Works even if you are new to crypto or in a hurry.**
+- **No fear of losing your history** — everything is saved safely on 0G Storage, verifiable by root hash.
+- **No blind trust in the AI** — every action ships a receipt you can verify in a browser.
 
 Just open Telegram and talk. That's it.
 
@@ -101,7 +123,49 @@ Just open Telegram and talk. That's it.
 ## 💡 What Galileo Does
 
 Galileo is feature-rich under the hood, but the surface is one thing: **type what you want
-and it happens.** Here's a quick tour:
+and it happens — provably.** Every action below ends with a public verification link from
+the Proof Center.
+
+### 🛡️ The Verifiable Intent Pipeline
+
+Every financial action travels the same primitive — one dominant primitive, not a bag of features:
+
+```
+natural-language intent
+   │
+   ▼
+1. TEE-attested parse       ← 0G Compute (hardware enclave signs the AI's reasoning)
+   │
+   ▼
+2. Risk checks              ← recipient_resolved · balance_ok · user_confirmed · approval_ok · …
+   │
+   ▼
+3. User confirmation        ← Confirm button (or implicit_schedule for DCA/alerts)
+   │
+   ▼
+4. On-chain execution       ← 0G Chain (tx hash, deterministic settlement)
+   │
+   ▼
+5. Verified Intent Receipt  ← 0G Storage (immutable, root-hash-addressable)
+   │
+   ▼
+6. Public verification link ← /verify/:rootHash — open in any browser, no Telegram access needed
+```
+
+> **Galileo refuses to move money unless the intent is verifiable.** Send, swap, DCA execution,
+> alert fire, and key-reveal each emit a Verified Intent Receipt (F5) stored on 0G Storage
+> under its own root hash. Use `/receipt` to list yours, or open any root hash at
+> [`/verify/:root`](https://galileo-test.fly.dev/verify/).
+
+### Decision rules (what gets built next)
+
+- **No new wallet features unless they strengthen proof, safety, or 0G dependency.**
+- **Every feature must answer: what breaks if 0G is removed?**
+- **Every live demo must end with a public verification link, not a claim.**
+
+### Feature tour
+
+Here's what rides on top of that primitive — type what you want and it happens, provably:
 
 ### 💬 Just Talk
 
@@ -140,8 +204,8 @@ Set-and-forget money habits, just by talking:
 
 ### 💱 Swap, Send, Wrap
 
-- **Swap** OG↔USDC↔USDT↔WOG via DEX. *"Swap 0.1 OG to USDC"* → confirm → done.
-- **Send** to `@username` or `0x…` addresses with a Confirm button before any on-chain move.
+- **Swap** OG↔USDC↔USDT↔WOG via DEX. *"Swap 0.1 OG to USDC"* → confirm → done → ends with a public verification link.
+- **Send** to `@username` or `0x…` addresses with a Confirm button before any on-chain move → receipt links to `/verify/:root`.
 - **Wrap/Unwrap** OG↔WOG. *"Wrap 1 OG"* or `/wrap 1`.
 
 ### 📊 Portfolio + P&L
@@ -159,7 +223,8 @@ Every interaction is permanently stored on 0G Storage. The bot remembers:
 - Previous tool calls and their results
 - On-chain transactions
 
-Memory survives bot restarts. Ask *"what did I do yesterday?"* and get the right answer.
+Memory survives bot restarts. Ask *"what did I do yesterday?"* and get the right answer —
+verifiable from the same 0G Storage root hash that backs every receipt.
 
 ### 🔐 TEE-Verified Replies
 
@@ -171,19 +236,21 @@ Every AI reply carries a verification footer:
 
 The 0G Compute Network SDK signs each request and verifies the provider's TEE-signed
 response. Verified chat IDs are persisted to 0G Storage alongside your conversation history —
-send `/proof` to see the last 10.
+send `/proof` to see the last 10. This is the first leg of the verifiable intent pipeline:
+the AI's reasoning is hardware-attested before any action is allowed to execute.
 
 ### 🏛 Public Proof Center — Verifiable in Any Browser
 
-Galileo ships a web-based audit dashboard that proves every on-chain action without
-screenshot trust or Telegram access:
+Galileo ships a web-based audit dashboard. **Every action ends with a public verification
+link, not a claim.** A judge can verify any receipt from a browser by root hash — no
+Telegram access, no screenshots, no trust required:
 
 | Route | Purpose |
 |---|---|
+| [`/verify/:root`](https://galileo-test.fly.dev/verify/) | Recover and verify a receipt from 0G Storage by root hash or user ID — the canonical end-of-demo link |
 | [`/proofs`](https://galileo-test.fly.dev/proofs) | Live feed of system config, chain info, and audit trail |
 | [`/status`](https://galileo-test.fly.dev/status) | Health dashboard — compute TEE status, chain block #, storage, uptime |
 | [`/intents/live`](https://galileo-test.fly.dev/intents/live) | DCA & alert executions — status badges, timestamps, tx links to chainscan |
-| [`/verify/:root`](https://galileo-test.fly.dev/verify/) | Recover and verify a receipt from 0G Storage by root hash or user ID |
 
 Every page includes the chain ID, evidence source status, and UTC timestamps. No framework,
 no external CSS — minimal HTML that renders in any browser.
@@ -233,7 +300,7 @@ for the layered architecture diagram and design rationale.
 
 ### 🤖 AI Tools (the depth under the hood)
 
-The agent exposes **25 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
+The agent exposes **26 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 `src/ai/toolExecutor.ts`. Grouped by area:
 
 - **Wallet CRUD** — `create_wallet`, `list_wallets`, `get_balance`, `get_wallet_address`,
@@ -248,9 +315,10 @@ The agent exposes **25 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 - **On-chain explainers (read-only)** — `explain_contract`, `explain_transaction`
 - **Profile NFT** — `get_profile_nft` (view your soulbound badge), `get_leaderboard` (community size)
 
-> **Note:** sending funds and importing wallets are **not** AI tools. Both run through
+> **Why sends and imports are not AI tools:** sending funds and importing wallets run through
 > deterministic command + Confirm-button flows (`/send`, `/import`) so private keys never
-> enter conversation history or 0G Storage memory snapshots.
+> enter conversation history or 0G Storage memory snapshots. This is a deliberate safety
+> property — keys never reach the LLM, so the TEE-attested agent cannot exfiltrate them.
 
 ---
 
@@ -317,7 +385,9 @@ create me a wallet
 ```
 
 The bot will create a wallet, show you the address and private key, and ask you to name it.
-That's it — you're set.
+Then verify the action yourself — open any receipt's root hash at
+[`/verify/:root`](https://galileo-test.fly.dev/verify/). That's it — you're set, and the
+proof is public.
 
 ---
 
@@ -381,16 +451,23 @@ That's it — you're set.
 
 ### Data Flow
 
+The agent loop below is the **read path** (memory, balance, portfolio, explainers). The
+**write path** for any action that moves value follows the [Verifiable Intent Pipeline](#-the-verifiable-int-pipeline) instead — it stages a receipt, requires a Confirm tap,
+executes on-chain, and uploads the finalized receipt to 0G Storage before returning a
+verification link.
+
 1. **User sends message** → `aiHandler` receives the text; `bot.ts` middleware passively
    records `@username` into the [Username Index](0G-INTEGRATION.md#3-username-registry)
 2. **History loaded** → Past interactions fetched from 0G Storage (or in-memory cache)
 3. **Memory context built** → Recent + earliest entries formatted for LLM context
-4. **LLM inference** → 0G Compute processes the prompt with tool definitions
+4. **LLM inference** → 0G Compute processes the prompt with tool definitions (TEE-attested)
 5. **Tool execution** → If LLM requests a tool (create wallet, check balance, etc.),
-   `toolExecutor` dispatches it
+   `toolExecutor` dispatches it. Value-moving tools only *stage* an action + receipt.
 6. **Result loop** → Tool results fed back to LLM for final response
 7. **Persistence** → Interaction saved to 0G Storage (best-effort, non-blocking)
-8. **Reply** → Response sent to user with quick-action buttons
+8. **Reply** → Response sent to user with quick-action buttons. For value moves, the reply
+   is a Confirm button — nothing settles until the user taps it, after which the finalized
+   receipt's root hash becomes the public verification link.
 
 ### Tech Stack
 
@@ -408,29 +485,32 @@ That's it — you're set.
 
 ### Overview — The Stack at a Glance
 
-| Layer | Technology |
-|---|---|
-| **Chain** | 0G Galileo testnet (Chain ID 16602) |
-| **Compute** | 0G Compute Network SDK (TEE-verifiable LLM inference) |
-| **Storage** | 0G Storage (permanent, immutable memory + verification proofs) |
-| **AI Model** | Qwen 2.5 Omni 7B (via 0G Compute) |
+| Layer | Technology | Role in the verifiable intent pipeline |
+|---|---|---|
+| **Chain** | 0G Galileo testnet (Chain ID 16602) | Deterministic settlement for the executed intent (step 4) |
+| **Compute** | 0G Compute Network SDK (TEE-verifiable LLM inference) | Hardware-attested parse of natural-language intent (step 1) |
+| **Storage** | 0G Storage (permanent, immutable) | Home of the Verified Intent Receipt + permanent memory (step 5 → `/verify/:root`) |
+| **AI Model** | Qwen 2.5 Omni 7B (via 0G Compute) | The agent whose every reply is TEE-signed |
 
-Users can create wallets, check balances, view addresses, rename wallets, and recall past
-activity — all by typing plain English (or Pidgin, Yoruba, French, and 7+ other languages).
+Remove any one of these three layers and Galileo can no longer credibly claim to be a
+verifiable AI wallet — which is the point. Users still create wallets, check balances, view
+addresses, rename wallets, and recall past activity by typing plain English (or Pidgin,
+Yoruba, French, and 7+ other languages) — but no value moves without the full pipeline.
 
 ---
 
 ## 📚 Documentation Map
 
-This README is the **front door** — the hero, pitch, and high-level feature overview.
-For deep reference material, the docs are one click away:
+This README is the **front door** — the pitch (verifiable AI wallet), the dominant primitive
+(the Verifiable Intent Pipeline), and the high-level feature tour. For deep reference
+material, the docs are one click away:
 
 | What you want | Where to go |
 |---|---|
 | **Every command + natural language pattern + multi-language examples** | **[docs/USAGE.md](docs/USAGE.md)** |
 | **Test suite, CI matrix, debug scripts** | **[docs/TESTING.md](docs/TESTING.md)** |
 | **Full env-var reference + secrets + deploy to Fly.io** | **[DEPLOY.md](DEPLOY.md)** |
-| **0G stack depth (memory, compute, storage, integration patterns)** | **[0G-INTEGRATION.md](0G-INTEGRATION.md)** |
+| **0G stack depth — why each layer is required, not optional** | **[0G-INTEGRATION.md](0G-INTEGRATION.md)** |
 
 ---
 
@@ -442,7 +522,7 @@ src/
 ├── config.ts                 # Zod-validated environment config
 ├── bot.ts                    # grammY bot setup + routing
 ├── health.ts                 # /health + /proofs HTTP endpoints
-├── proofCenter.ts            # Public audit dashboard (/proofs, /status, /intents/live, /verify/:root)
+├── proofCenter.ts            # Public audit dashboard (/proofs, /status, /intents/live, /verify/:root — canonical verification link)
 ├── faq.ts                    # /help FAQ text
 ├── helpContent.ts            # Shared /help + onboarding copy
 │
@@ -485,6 +565,7 @@ src/
 │   ├── importHandlers.ts     # /import flow (prompt → preview → Confirm/Cancel)
 │   ├── portfolioHandlers.ts  # /portfolio, /price, /history
 │   ├── proofHandler.ts       # /proof command (recent TEE-verified chats)
+│   ├── receiptHandler.ts     # /receipt — lists a user's Verified Intent Receipts
 │   ├── swapHandlers.ts       # Swap Confirm/Cancel callbacks
 │   ├── swapUiHandlers.ts     # /swap command + deterministic swap parsing
 │   ├── sendHandlers.ts       # Send Confirm/Cancel callbacks
@@ -516,6 +597,12 @@ src/
 │   ├── sendService.ts        # Send orchestration (prepare/execute)
 │   └── pendingSend.ts        # Pending-send state for Confirm buttons
 │
+├── receipts/                 # F5: Verified Intent Receipts — the verifiable intent primitive
+│   ├── types.ts              # Zod schema for send/swap/dca/alert/key_reveal receipts
+│   ├── receiptService.ts     # Stage → finalize → emit (uploads to 0G Storage, indexes root hash)
+│   ├── receiptStore.ts       # Local index: receiptId → { rootHash, userId, actionType, status }
+│   └── index.ts              # Barrel export
+│
 └── util/
     └── qr.ts                 # Address → QR PNG generator
 
@@ -530,31 +617,35 @@ scripts/
 
 ## 🧭 Roadmap
 
+> **Decision rule:** no new wallet features are added to this list unless they strengthen
+> proof, safety, or 0G dependency. Every planned item must answer *what breaks if 0G is
+> removed?* and every live demo of it must end with a public verification link.
+
 | Feature | Status |
 |---|---|
+| **F5** Verifiable AI Receipts — the dominant primitive | ✅ Complete (send + swap + DCA + alert + key-reveal receipts, all on 0G Storage) |
 | **F4** On-Chain Wallet Generator | ✅ Complete |
-| **F2** Conversational AI Agent | ✅ Complete |
-| **F7** Multi-Language Support | ✅ Complete |
+| **F2** Conversational AI Agent (TEE-attested) | ✅ Complete |
 | **F1** Infinite Memory (0G Storage) | ✅ Complete |
+| **F7** Multi-Language Support | ✅ Complete |
 | **UX** Quick-action buttons, loading states, message splitting | ✅ Complete |
 | **F3** Verifiable AI Portfolio Advisor | ✅ Complete (`/portfolio`, `/price`, `/history` + `transaction_stats` tool) |
-| **F5** Verifiable AI Receipts | ⏳ Planned |
-| **F6** Smart Link / Action Generator | ⏳ Planned |
 | **DEX** Demo Uniswap-V2 + mock USDC/USDT on 0G Galileo | ✅ Complete |
 | **Wallet Import** Bring an existing wallet via private key (`/import`, Confirm-gated) | ✅ Complete |
 | **On-Chain Explainers** `explain_contract` + `explain_transaction` read-only lookups | ✅ Complete |
 | **Username Registry Persistence** | ✅ Complete (in-memory + optional 0G Storage layer, gated by `OG_STORAGE_ENABLED`) |
 | **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 6 AI tools; ticks every 30s, survives restarts via 0G Storage) |
-| **Telegram Mini-App Dashboard** — Portfolio, history, proof as embedded WebApp | ⏳ Planned |
 | **Profile NFT** Soulbound ERC-721 per user (`GALPRO`), auto-mint on first wallet | ✅ Complete |
 | **Proof Center** Web-verifiable audit dashboard at `/proofs`, `/status`, `/intents/live`, `/verify/:root` | ✅ Complete |
-| **Multi-Agent Sub-Personalities** — Trader/Analyst/Security/Tax modes with auto-routing | ⏳ Planned |
+| **F6** Smart Link / Action Generator | ⏳ Planned (must emit a verifiable receipt) |
+| **Telegram Mini-App Dashboard** — Portfolio, history, proof as embedded WebApp | ⏳ Planned (must surface the `/verify/:root` link) |
+| **One-Tap Proof** — Share verified 0G transactions easily | ⏳ Planned (strengthens proof) |
+| **Multi-Agent Sub-Personalities** — Trader/Analyst/Security/Tax modes with auto-routing | ⏳ Planned (every agent turn must remain TEE-attested) |
 | **Voice Messages** — Talk instead of typing | ⏳ Planned |
-| **Family & Group Wallets** — Shared wallets for family and groups | ⏳ Planned |
-| **Smart Savings Plans** — Automated recurring savings by talking | ⏳ Planned |
-| **Multi-Chain Support** — Send money across different networks | ⏳ Planned |
+| **Family & Group Wallets** — Shared wallets for family and groups | ⏳ Planned (must preserve per-user receipts) |
+| **Smart Savings Plans** — Automated recurring savings by talking | ⏳ Planned (extends the DCA primitive) |
+| **Multi-Chain Support** — Send money across different networks | ⏳ Planned (receipts must remain 0G Storage-rooted) |
 | **Personal AI Tips** — Gentle spending and usage insights | ⏳ Planned |
-| **One-Tap Proof** — Share verified 0G transactions easily | ⏳ Planned |
 
 ---
 
@@ -595,5 +686,5 @@ debug scripts inventory live in **[docs/TESTING.md](docs/TESTING.md)**.
 
 <div align="center">
 Built with ❤️ for the 0G ecosystem · <a href="https://0g.ai">0g.ai</a><br/>
-<sub>Galileo is your AI wallet friend on Telegram. Built for everyone.</sub>
+<sub>Galileo — the verifiable AI wallet on 0G. Every intent is TEE-attested, user-confirmed, executed on-chain, and independently auditable from 0G Storage.</sub>
 </div>

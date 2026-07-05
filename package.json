@@ -2,7 +2,7 @@
   "name": "0g-memory-wallet",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-native Telegram wallet bot on the 0G stack (Chain + Compute + Storage). Phase 1: bot startup + on-chain wallet generator (F4).",
+  "description": "Galileo — the verifiable AI wallet on 0G. Natural-language finance where every intent is TEE-attested, user-confirmed, executed on 0G Chain, and independently auditable from 0G Storage.",
   "type": "module",
   "engines": {
     "node": ">=20"

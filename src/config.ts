@@ -79,6 +79,12 @@ const schema = z.object({
   // the index and all recorded history becomes unfindable on 0G Storage.
   OG_STORAGE_INDEX_PATH: z.string().default(''),
 
+  // F5 Verified Intent Receipts: local index mapping receiptId →
+  // { rootHash, userId, actionType, status, createdAt }. Lets /receipt list a
+  // user's receipts and /verify/:root render them without scanning 0G Storage.
+  // Derived beside the wallet store (same persistent volume) when unset.
+  OG_RECEIPT_INDEX_PATH: z.string().default(''),
+
   // Privacy: salt for anonymizing userIds in the public proofs.json feed.
   // Optional — scripts/generateProofIndex.ts falls back to a dev-only string
   // (which warns loudly in production). Set via `fly secrets` in production
@@ -120,6 +126,9 @@ function load(): AppConfig {
   // redeploy wiped the userId → rootHash map, making recorded txs unfindable.
   if (!cfg.OG_STORAGE_INDEX_PATH) {
     cfg.OG_STORAGE_INDEX_PATH = join(dirname(cfg.WALLET_STORE_PATH), 'root-index.json');
+  }
+  if (!cfg.OG_RECEIPT_INDEX_PATH) {
+    cfg.OG_RECEIPT_INDEX_PATH = join(dirname(cfg.WALLET_STORE_PATH), 'receipts-index.json');
   }
   return cfg;
 }

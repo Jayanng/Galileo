@@ -17,6 +17,7 @@ import { addressQr } from '../util/qr';
 import { formatOG } from '../og/chain';
 import { FAQ_TEXT } from '../faq';
 import { HELP_TEXT } from '../helpContent';
+import { createKeyRevealReceipt } from '../receipts';
 
 function userIdOf(ctx: Context): string | null {
   const id = ctx.from?.id;
@@ -133,13 +134,29 @@ function secretCaption(s: WalletSecrets): string {
   ].join('\n');
 }
 
-async function sendReveal(ctx: Context, secrets: WalletSecrets): Promise<void> {
+async function sendReveal(
+  ctx: Context,
+  secrets: WalletSecrets,
+  revealMethod: 'command_privatekey' | 'button_export' | 'button_new_wallet' | 'command_wallet',
+): Promise<void> {
   const png = await addressQr(secrets.address);
   await ctx.replyWithPhoto(new InputFile(png, 'wallet.png'), {
     caption: secretCaption(secrets),
     parse_mode: 'Markdown',
     reply_markup: savedKeyboard(secrets.id),
   });
+  // F5: emit a local-only key-reveal receipt (never uploaded to 0G Storage).
+  const userId = ctx.from?.id ? String(ctx.from.id) : null;
+  if (userId) {
+    createKeyRevealReceipt({
+      userId,
+      walletId: secrets.id,
+      walletName: secrets.name,
+      walletAddress: secrets.address,
+      revealMethod,
+      secretKind: secrets.mnemonic ? 'recovery_phrase' : 'private_key',
+    }).catch((e) => console.warn(`[walletHandlers] key-reveal receipt failed:`, (e as Error).message));
+  }
 }
 
 async function sendCleanAddress(
@@ -154,7 +171,11 @@ async function sendCleanAddress(
 }
 
 /** Create a wallet, make it active, and reveal its key + seed. */
-async function createAndReveal(ctx: Context, userId: string): Promise<void> {
+async function createAndReveal(
+  ctx: Context,
+  userId: string,
+  trigger: 'command_wallet' | 'button_new_wallet',
+): Promise<void> {
   await ctx.replyWithChatAction('upload_photo');
   const wallet = await createWallet(userId);
   await setActiveId(userId, wallet.id);
@@ -163,7 +184,7 @@ async function createAndReveal(ctx: Context, userId: string): Promise<void> {
     await ctx.reply('Wallet created, but I could not read it back. Try /privatekey.');
     return;
   }
-  await sendReveal(ctx, secrets);
+  await sendReveal(ctx, secrets, trigger);
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
@@ -174,7 +195,7 @@ export async function handleCreateWallet(ctx: Context): Promise<void> {
     await ctx.reply('Sorry, I could not identify your account.');
     return;
   }
-  await createAndReveal(ctx, userId);
+  await createAndReveal(ctx, userId, 'command_wallet');
 }
 
 export async function handleListAddresses(ctx: Context): Promise<void> {
@@ -291,7 +312,7 @@ export async function handleExport(ctx: Context): Promise<void> {
     await ctx.reply('Could not read that wallet.');
     return;
   }
-  await sendReveal(ctx, secrets);
+  await sendReveal(ctx, secrets, 'button_export');
 }
 
 export async function handleHomeBack(ctx: Context): Promise<void> {
@@ -315,7 +336,7 @@ export async function handleNewWallet(ctx: Context): Promise<void> {
   const userId = userIdOf(ctx);
   await ctx.answerCallbackQuery();
   if (!userId) return;
-  await createAndReveal(ctx, userId);
+  await createAndReveal(ctx, userId, 'button_new_wallet');
 }
 
 // ── Private key / seed reveal (explicit, command + button only) ──────────────
@@ -350,7 +371,7 @@ export async function handleRevealPrivateKey(ctx: Context): Promise<void> {
     await ctx.reply('That wallet no longer exists.');
     return;
   }
-  await sendReveal(ctx, secrets);
+  await sendReveal(ctx, secrets, 'command_privatekey');
 }
 
 export async function handleSavedKey(ctx: Context): Promise<void> {

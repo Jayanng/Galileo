@@ -23,6 +23,7 @@ import { executeSwap } from '../swap/swapService';
 import { pendingSwaps, type PendingSwap } from '../swap/pendingSwap';
 import { getWallet } from '../wallet/walletService';
 import { recordTx } from '../ai/memory';
+import { createDcaExecutionReceipt, createAlertFireReceipt } from '../receipts';
 
 /** Minimal bot surface used here — keeps tests free of grammY. */
 export interface TelegramBot {
@@ -218,6 +219,19 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
     to: intent.toToken,
     hash: result.hash,
   }).catch(() => {});
+  // F5: emit a DCA execution receipt (links back to creation receipt via intentId).
+  createDcaExecutionReceipt({
+    userId: intent.userId,
+    intentId: intent.id,
+    fromToken: intent.fromToken,
+    toToken: intent.toToken,
+    amount: intent.amount,
+    scheduleRaw: intent.schedule.raw,
+    scheduleIntervalMs: intent.schedule.intervalMs,
+    walletId: intent.walletId,
+    walletName: wallet.name,
+    txHash: result.hash,
+  }).catch((e) => console.warn(`[intents] DCA execution receipt failed:`, (e as Error).message));
   await bot.api.sendMessage(
     intent.userId,
     `✅ DCA fired (${intent.schedule.raw}): ${result.summary}\nNext attempt in ${intent.schedule.raw}.`,
@@ -244,6 +258,18 @@ async function executeAlert(alert: AlertIntent, bot: TelegramBot): Promise<Execu
       alert.userId,
       `🔔 Alert fired: ${alert.symbol} is now ${priceFmt(price)} (${alert.operator} $${alert.threshold})`,
     );
+    // F5: emit an alert fire receipt (includes trigger price + notification proof).
+    const priceSource = alert.coingeckoId === 'stablecoin' ? 'hardcoded:$1' : `coingecko:${alert.coingeckoId}`;
+    createAlertFireReceipt({
+      userId: alert.userId,
+      intentId: alert.id,
+      symbol: alert.symbol,
+      coingeckoId: alert.coingeckoId,
+      operator: alert.operator,
+      threshold: alert.threshold,
+      triggerPrice: price,
+      priceSource,
+    }).catch((e) => console.warn(`[intents] alert fire receipt failed:`, (e as Error).message));
     return { intent: { ...alert, status: 'fired', firedAt: now, lastCheckedAt: now } };
   }
   return { intent: { ...alert, lastCheckedAt: now } };

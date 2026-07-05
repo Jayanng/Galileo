@@ -4,15 +4,20 @@ import { listWallets, getSigner, getWalletBalance } from '../wallet/walletServic
 import { formatOG } from '../og/chain';
 import { recordTx } from '../ai/memory';
 import { pendingSends } from './pendingSend';
+import { stageSendReceipt, finalizeReceipt, failReceipt } from '../receipts';
 
 export type PrepareSendResult = { ok: true; summary: string } | { ok: false; error: string };
-export type ExecuteSendResult = { ok: true; hash: string; summary: string } | { ok: false; error: string };
+export type ExecuteSendResult =
+  | { ok: true; hash: string; summary: string; receiptId?: string; receiptRootHash?: string | null }
+  | { ok: false; error: string };
 
 export interface PrepareSendReq {
   to: string;
   amount: string;
   recipientKind?: 'address' | 'username';
   resolvedUsername?: string;
+  rawInput?: string;
+  source?: 'command' | 'nl' | 'button';
 }
 
 export async function prepareSend(
@@ -62,6 +67,18 @@ export async function prepareSend(
     toLine,
   ].join('\n');
 
+  const receiptId = stageSendReceipt({
+    userId,
+    amount: req.amount,
+    recipientKind: req.recipientKind === 'username' ? 'username' : 'address',
+    resolvedUsername: req.resolvedUsername,
+    resolvedAddress: req.to,
+    walletId: wallet.id,
+    walletName: wallet.name,
+    rawInput: req.rawInput,
+    source: req.source ?? 'command',
+  });
+
   pendingSends.set(userId, {
     walletId: wallet.id,
     walletName: wallet.name,
@@ -71,6 +88,7 @@ export async function prepareSend(
     summary,
     recipientKind: req.recipientKind,
     resolvedUsername: req.resolvedUsername,
+    receiptId,
   });
 
   return { ok: true, summary };
@@ -82,14 +100,37 @@ export async function executeSend(userId: string): Promise<ExecuteSendResult> {
   pendingSends.clear(userId);
 
   const signer = await getSigner(userId, p.walletId);
-  if (!signer) return { ok: false, error: 'Could not load wallet.' };
+  if (!signer) {
+    if (p.receiptId) failReceipt(p.receiptId, 'Could not load wallet.').catch(() => {});
+    return { ok: false, error: 'Could not load wallet.' };
+  }
 
   try {
     const tx = await signer.sendTransaction({ to: p.toAddress, value: BigInt(p.amountWei) });
     await tx.wait();
     recordTx(userId, { type: 'send', amount: p.amountLabel, to: p.toAddress, hash: tx.hash }).catch(() => {});
-    return { ok: true, hash: tx.hash, summary: p.summary };
+
+    // F5: finalize the Verified Intent Receipt (sets txHash + user_confirmed,
+    // uploads to 0G Storage under receipt:<id>, indexes the rootHash).
+    let receiptRootHash: string | null = null;
+    if (p.receiptId) {
+      try {
+        const finalized = await finalizeReceipt(p.receiptId, tx.hash);
+        receiptRootHash = finalized?.rootHash ?? null;
+      } catch (e) {
+        console.warn(`[send] receipt finalize failed for ${p.receiptId}:`, (e as Error).message);
+      }
+    }
+
+    return {
+      ok: true,
+      hash: tx.hash,
+      summary: p.summary,
+      receiptId: p.receiptId,
+      receiptRootHash,
+    };
   } catch (e) {
+    if (p.receiptId) failReceipt(p.receiptId, (e as Error).message).catch(() => {});
     return { ok: false, error: (e as Error).message };
   }
 }

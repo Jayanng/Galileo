@@ -7,6 +7,7 @@ export interface PendingSend {
   summary: string; // markdown shown with the Confirm button
   recipientKind?: 'address' | 'username';
   resolvedUsername?: string;
+  receiptId?: string; // F5: staged Verified Intent Receipt (finalized on Confirm)
 }
 
 const pending = new Map<string, PendingSend>();

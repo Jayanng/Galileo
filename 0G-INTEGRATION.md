@@ -1,8 +1,19 @@
 # 0G Integration Reference
 
-> **Single source of truth for auditing every 0G touchpoint in the Galileo bot.**
+> **Single source of truth for auditing every 0G touchpoint in Galileo.**
 > Every link opens a live explorer page. All addresses are annotated with their
 > environment variable so you can verify against any running instance.
+
+> **Galileo is the verifiable AI wallet on 0G.** This document exists because 0G is not
+> a feature of Galileo — it is the precondition for any sensitive action to execute. Every
+> layer below answers a single question: **what breaks if 0G is removed?**
+>
+> - **Without 0G Compute**, the AI's reasoning has no hardware-attested proof → no TEE leg.
+> - **Without 0G Chain**, there is no deterministic settlement for the executed intent.
+> - **Without 0G Storage**, the Verified Intent Receipt has no immutable home → no public
+>   verification link, no judge-verifiable audit trail.
+>
+> Remove any one layer and Galileo cannot credibly claim to be a verifiable AI wallet.
 
 ---
 
@@ -345,6 +356,30 @@ Every on-chain action generates a verifiable trail:
 | **Swap (DEX)** | Tx hash (router swap) | [ChainScan](https://chainscan-galileo.0g.ai/tx/${TX_HASH}) | `StoredTx` in user snapshot |
 | **Memory snapshot** | Storage root hash | [scan.0g.ai](https://scan.0g.ai) (paste rootHash) | `OG_STORAGE_INDEX_PATH` |
 | **AI reply** | TEE chatID | Verified via `processResponse()` | `StoredProof` in user snapshot |
+| **Verified Intent Receipt (F5)** | Storage root hash (`receipt:<id>`) | [`/verify/:root`](https://galileo-test.fly.dev/verify/) | `OG_RECEIPT_INDEX_PATH` |
+
+### Verified Intent Receipts (F5) — the canonical proof artifact
+
+The receipt is the single artifact that proves an end-to-end user action: *natural-language
+intent → deterministic parse → risk checks → explicit confirmation → on-chain tx → 0G Storage
+root*. It is the dominant primitive of Galileo — **no value moves without one.**
+
+| Action type | Lifecycle | On 0G Storage? | Receipt status |
+|---|---|---|---|
+| `send`, `swap` | stage (pre-Confirm) → finalize (post-tx) | ✅ on finalize | `staged` → `executed` / `cancelled` / `failed` |
+| `dca` | create-and-upload (creation); create-and-upload (each execution) | ✅ both | `created` / `executed` |
+| `alert` | create-and-upload (arming); create-and-upload (fire) | ✅ both | `armed` / `fired` |
+| `key_reveal` | create-and-index (local-only) | ❌ never | `revealed` |
+
+Each receipt is uploaded under its own namespace (`receipt:<receiptId>`), making it
+independently recoverable via `/verify/:rootHash` — immune to the rolling memory snapshot's
+`MAX_ENTRIES` compaction. Key-reveal receipts are deliberately local-only (sensitive metadata
+about key reveals should not live on public immutable storage).
+
+- **Schema**: `src/receipts/types.ts` (Zod-validated discriminated union on `actionType`)
+- **Service**: `src/receipts/receiptService.ts` (stage / finalize / emit / cancel / fail)
+- **Index**: `src/receipts/receiptStore.ts` → `OG_RECEIPT_INDEX_PATH` (receiptId → rootHash)
+- **List**: `/receipt` in Telegram; **Verify**: [`/verify/:root`](https://galileo-test.fly.dev/verify/) in any browser
 
 ### `/proof` command output
 

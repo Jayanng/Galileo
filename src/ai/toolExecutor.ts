@@ -28,6 +28,7 @@ import {
 import { getActiveId } from '../wallet/activeWallet';
 import { explainContract } from '../og/contractExplorer';
 import { explainTransaction } from '../og/transactionExplorer';
+import { createDcaCreationReceipt, createAlertCreationReceipt } from '../receipts';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -517,6 +518,17 @@ export async function executeTool(
         };
         await intentStore.add(intent);
         console.log(`[toolExecutor] dca_create id=${intent.id} ${amount} ${fromToken}\u2192${toToken} ${schedule.raw}`);
+        // F5: emit a DCA creation receipt (proves the schedule was set up).
+        const walletName = wallets.find((w) => w.id === resolvedWalletId)?.name;
+        createDcaCreationReceipt({
+          userId,
+          intentId: intent.id,
+          fromToken, toToken, amount,
+          scheduleRaw: schedule.raw,
+          scheduleIntervalMs: schedule.intervalMs,
+          walletId: resolvedWalletId!,
+          walletName,
+        }).catch((e) => console.warn(`[toolExecutor] dca creation receipt failed:`, (e as Error).message));
         return {
           success: true,
           data: {
@@ -586,6 +598,15 @@ export async function executeTool(
         };
         await intentStore.add(intent);
         console.log(`[toolExecutor] alert_create id=${intent.id} ${upper} ${operator} $${threshold}`);
+        // F5: emit an alert creation receipt (proves the alert was armed).
+        createAlertCreationReceipt({
+          userId,
+          intentId: intent.id,
+          symbol: upper,
+          coingeckoId,
+          operator,
+          threshold,
+        }).catch((e) => console.warn(`[toolExecutor] alert creation receipt failed:`, (e as Error).message));
         return {
           success: true,
           data: {
@@ -669,6 +690,7 @@ export async function executeTool(
           to: String(args.to ?? ''),
           amount: String(args.amount ?? ''),
           walletId: args.walletId ? String(args.walletId) : undefined,
+          source: 'nl',
         });
         if (!res.ok) return { success: false, error: res.error };
         return {

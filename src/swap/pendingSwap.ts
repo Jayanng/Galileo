@@ -15,6 +15,7 @@ export interface PendingSwap {
   minOutWei?: string;
   path?: string[];
   routeKind?: 'native-to-token' | 'token-to-native' | 'token-to-token';
+  receiptId?: string; // F5: staged Verified Intent Receipt (finalized on Confirm)
 }
 
 const pending = new Map<string, PendingSwap>();

@@ -27,6 +27,7 @@ import { sendState } from './wallet/sendState';
 import * as usernameIndex from './wallet/usernameIndex';
 import { handleAiMessage } from './handlers/aiHandler';
 import { handleProof } from './handlers/proofHandler';
+import { handleReceipt } from './handlers/receiptHandler';
 import { handlePortfolio, handlePrice, handleHistory } from './handlers/portfolioHandlers';
 import { handleSwapConfirm, handleSwapCancel } from './handlers/swapHandlers';
 import {
@@ -155,6 +156,7 @@ export function buildBot(): Bot {
   bot.command('send', handleSendCommand);
   bot.command('import', handleImportCommand);
   bot.command('proof', handleProof);
+  bot.command('receipt', handleReceipt);
   bot.command('portfolio', handlePortfolio);
   bot.command('price', handlePrice);
   bot.command('history', handleHistory);
@@ -206,7 +208,7 @@ export function buildBot(): Bot {
     const userId = ctx.from?.id ? String(ctx.from.id) : null;
     const parsed = userId ? parseSwapText(ctx.message.text) : null;
     if (!userId || !parsed) return next();
-    await stageSwap(ctx, userId, parsed);
+    await stageSwap(ctx, userId, { ...parsed, rawInput: ctx.message.text, source: 'nl' });
   });
 
   // 4e) Deterministic send-phrase matcher: "send X OG to 0xADDR" stages a send
@@ -215,7 +217,7 @@ export function buildBot(): Bot {
     const userId = ctx.from?.id ? String(ctx.from.id) : null;
     const parsed = userId ? parseSendText(ctx.message.text) : null;
     if (!userId || !parsed) return next();
-    await stageSend(ctx, userId, parsed);
+    await stageSend(ctx, userId, { ...parsed, rawInput: ctx.message.text, source: 'nl' });
   });
 
   // 4f) Deterministic DCA-phrase matcher: "dca 1 OG into USDC weekly" and

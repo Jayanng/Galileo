@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 980" font-family="'Inter', 'Segoe UI', system-ui, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1180" font-family="'Inter', 'Segoe UI', system-ui, sans-serif">
   <defs>
     <filter id="shadow" x="-4%" y="-4%" width="108%" height="112%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/>
@@ -15,6 +15,12 @@
     <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="#1565c0"/>
     </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#e65100"/>
+    </marker>
+    <marker id="arrowShield" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#6d28d9"/>
+    </marker>
     <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#f8f9fb"/>
       <stop offset="100%" stop-color="#eef0f4"/>
@@ -22,6 +28,15 @@
     <linearGradient id="tgGrad" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#27a7e7"/>
       <stop offset="100%" stop-color="#1e96c8"/>
+    </linearGradient>
+    <linearGradient id="pipelineGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#6d28d9"/>
+      <stop offset="50%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="receiptGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ede9fe"/>
+      <stop offset="100%" stop-color="#ddd6fe"/>
     </linearGradient>
     <linearGradient id="computeGrad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#e8f5e9"/>
@@ -39,238 +54,341 @@
       <stop offset="0%" stop-color="#fce4ec"/>
       <stop offset="100%" stop-color="#f8bbd0"/>
     </linearGradient>
+    <linearGradient id="verifyGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="980" fill="url(#bgGrad)" rx="12"/>
+  <rect width="1200" height="1180" fill="url(#bgGrad)" rx="12"/>
 
   <!-- Title -->
-  <text x="600" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1a2e">Galileo Architecture</text>
-  <text x="600" y="58" text-anchor="middle" font-size="13" fill="#6b7280">Every 0G primitive with exact SDK calls and file paths</text>
+  <text x="600" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1a2e">Galileo — The Verifiable AI Wallet on 0G</text>
+  <text x="600" y="58" text-anchor="middle" font-size="13" fill="#6b7280">Every intent is TEE-attested, user-confirmed, executed on-chain, and independently auditable from 0G Storage.</text>
 
-  <!-- LAYER 1: Telegram -->
-  <rect x="40" y="80" width="130" height="60" rx="30" fill="url(#tgGrad)" filter="url(#shadowDeep)"/>
-  <text x="105" y="108" text-anchor="middle" font-size="14" font-weight="600" fill="#fff">Telegram</text>
-  <text x="105" y="127" text-anchor="middle" font-size="11" fill="#d0e8f5">User</text>
-  <line x1="170" y1="110" x2="285" y2="110" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+  <!-- Key line banner -->
+  <rect x="40" y="72" width="1120" height="28" rx="14" fill="#1a1a2e"/>
+  <text x="600" y="91" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">🛡️  Galileo refuses to move money unless the intent is verifiable.</text>
 
-  <!-- grammY Bot -->
-  <rect x="290" y="75" width="240" height="70" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="410" y="100" text-anchor="middle" font-size="15" font-weight="700" fill="#1a1a2e">grammY Bot</text>
-  <text x="410" y="118" text-anchor="middle" font-size="11" fill="#6b7280">src/bot.ts</text>
-  <text x="410" y="133" text-anchor="middle" font-size="10" fill="#9ca3af">Bot(config.TELEGRAM_BOT_TOKEN)</text>
-  <line x1="530" y1="110" x2="645" y2="110" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 1: THE VERIFIABLE INTENT PIPELINE (the dominant primitive)   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <text x="40" y="128" font-size="13" font-weight="700" fill="#6d28d9">THE VERIFIABLE INTENT PIPELINE</text>
+  <text x="40" y="144" font-size="10" fill="#6b7280">One dominant primitive — every value-moving action travels these 6 steps. Remove any step and Galileo cannot credibly claim to be a verifiable AI wallet.</text>
 
-  <!-- LAYER 2: Agent Loop -->
-  <rect x="650" y="70" width="240" height="80" rx="10" fill="#fff" stroke="#818cf8" stroke-width="2" filter="url(#shadowDeep)"/>
-  <rect x="650" y="70" width="240" height="28" rx="10" fill="#818cf8"/>
-  <rect x="650" y="88" width="240" height="10" fill="#818cf8"/>
-  <text x="770" y="88" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">AI Agent Loop</text>
-  <text x="770" y="112" text-anchor="middle" font-size="11" fill="#4b5563">src/ai/agent.ts</text>
-  <text x="770" y="130" text-anchor="middle" font-size="10" fill="#6b7280">runAgent()  max 5 iterations</text>
-  <text x="770" y="143" text-anchor="middle" font-size="10" fill="#6b7280">tools.ts + toolExecutor.ts</text>
-  <line x1="770" y1="150" x2="770" y2="190" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="780" y="174" font-size="10" fill="#6b7280">tool dispatch</text>
+  <!-- Pipeline band -->
+  <rect x="40" y="155" width="1120" height="110" rx="10" fill="url(#pipelineGrad)" filter="url(#shadowDeep)"/>
 
-  <!-- LAYER 3: Tool Executor -->
-  <rect x="40" y="195" width="1120" height="56" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-  <text x="600" y="215" text-anchor="middle" font-size="13" font-weight="600" fill="#374151">Tool Executor  src/ai/toolExecutor.ts</text>
-  <text x="600" y="232" text-anchor="middle" font-size="10" fill="#6b7280">Dispatches LLM tool calls to wallet / send / swap / portfolio / memory services</text>
-  <line x1="600" y1="251" x2="600" y2="280" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
-
-  <!-- Service boxes -->
-  <g transform="translate(40, 285)">
-    <rect x="0" y="0" width="190" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="95" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Wallet Service</text>
-    <text x="95" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/wallet/walletService.ts</text>
-
-    <rect x="200" y="0" width="190" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="295" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Send Service</text>
-    <text x="295" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/send/sendService.ts</text>
-
-    <rect x="400" y="0" width="190" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="495" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Swap Service</text>
-    <text x="495" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/swap/swapService.ts</text>
-
-    <rect x="600" y="0" width="190" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="695" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Portfolio</text>
-    <text x="695" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/og/portfolio.ts</text>
-
-    <rect x="800" y="0" width="190" height="44" rx="6" fill="#fff" stroke="#1565c0" stroke-width="1.5" filter="url(#shadow)"/>
-    <text x="895" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#1565c0">F1 Memory</text>
-    <text x="895" y="33" text-anchor="middle" font-size="10" fill="#1565c0">src/ai/memory.ts</text>
-
-    <rect x="1000" y="0" width="160" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="1080" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Prices</text>
-    <text x="1080" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/og/prices.ts</text>
-
-    <!-- Username Index (sub-service, below Send) -->
-    <rect x="210" y="56" width="170" height="38" rx="6" fill="#fff" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,2" filter="url(#shadow)"/>
-    <text x="295" y="73" text-anchor="middle" font-size="11" font-weight="600" fill="#7c3aed">Username Index</text>
-    <text x="295" y="87" text-anchor="middle" font-size="9" fill="#7c3aed">src/wallet/usernameIndex.ts</text>
+  <!-- Step 1: TEE-attested parse -->
+  <g transform="translate(60, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="#fff" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#6d28d9">1 · TEE-attested parse</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#6b7280">0G Compute</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#2e7d32">computeBroker.ts</text>
+    <text x="80" y="64" text-anchor="middle" font-size="8" fill="#4b5563">hardware enclave signs</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" fill="#4b5563">the AI's reasoning</text>
   </g>
 
-  <!-- Dashed arrows: bot.ts middleware records usernames -->
-  <!-- from the grammY Bot box (x=410, y=145) down to Username Index (x=295, y=341) -->
-  <path d="M 395 145 L 395 225 L 295 225 L 295 336" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrow)"/>
-  <text x="312" y="220" font-size="9" fill="#7c3aed">bot.ts middleware records @username</text>
+  <!-- Step 2: Risk checks -->
+  <g transform="translate(235, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="#fff" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#6d28d9">2 · Risk checks</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#6b7280">structured {check, status, ts}</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#374151">recipient_resolved</text>
+    <text x="80" y="62" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#374151">balance_ok · approval_ok</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#374151">user_confirmed · no_ai_access</text>
+  </g>
 
-  <!-- Dashed arrow: Send Service → Username Index lookup -->
-  <path d="M 295 329 L 295 341" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrow)"/>
-  <text x="305" y="337" font-size="9" fill="#7c3aed">recipientResolver resolves</text>
+  <!-- Step 3: User confirmation -->
+  <g transform="translate(410, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="#fff" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#6d28d9">3 · User confirmation</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#6b7280">Confirm button (Telegram)</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#374151">telegram_inline_button</text>
+    <text x="80" y="62" text-anchor="middle" font-size="8" fill="#4b5563">implicit_schedule (DCA)</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" fill="#4b5563">automatic_scheduled (fire)</text>
+  </g>
 
-  <!-- Arrows: Services to 0G Stack (angled paths reaching target columns) -->
-  <!-- Wallet + Send to Chain (green arrow from each, merging to Chain column at x=750) -->
-  <path d="M 135 329 L 135 380 L 750 380 L 750 405" stroke="#e65100" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="145" y="354" font-size="9" fill="#e65100">balances</text>
-  <path d="M 295 329 L 295 370 L 750 370 L 750 405" stroke="#e65100" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="305" y="354" font-size="9" fill="#e65100">send tx</text>
+  <!-- Step 4: On-chain execution -->
+  <g transform="translate(585, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="#fff" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#6d28d9">4 · On-chain execution</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#6b7280">0G Chain (Chain ID 16602)</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#e65100">chain.txHash</text>
+    <text x="80" y="62" text-anchor="middle" font-size="8" fill="#4b5563">deterministic settlement</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" fill="#4b5563">operator wallet pays gas</text>
+  </g>
 
-  <!-- Swap to DEX (x=1040) -->
-  <path d="M 495 329 L 495 390 L 1040 390 L 1040 405" stroke="#c2185b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="505" y="354" font-size="9" fill="#c2185b">wrap, swap, approve</text>
+  <!-- Step 5: Verified Intent Receipt -->
+  <g transform="translate(760, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="#fff" stroke="#6d28d9" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#6d28d9">5 · Verified Intent Receipt</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#6b7280">0G Storage (immutable)</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#1565c0">receipt:&lt;receiptId&gt;</text>
+    <text x="80" y="62" text-anchor="middle" font-size="8" fill="#4b5563">send · swap · dca · alert</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" fill="#4b5563">key_reveal (local-only)</text>
+  </g>
 
-  <!-- Portfolio to Prices (already aligned, just extend) -->
-  <path d="M 695 329 L 695 410" stroke="#5a5a6e" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
-  <text x="705" y="354" font-size="9" fill="#6b7280">getPriceUSD (CoinGecko)</text>
+  <!-- Step 6: Public verification link -->
+  <g transform="translate(935, 172)">
+    <rect x="0" y="0" width="160" height="76" rx="8" fill="url(#verifyGrad)" filter="url(#shadowDeep)"/>
+    <text x="80" y="20" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">6 · Public verification</text>
+    <text x="80" y="36" text-anchor="middle" font-size="9" fill="#d1fae5">/verify/:rootHash</text>
+    <text x="80" y="50" text-anchor="middle" font-size="8" font-family="'JetBrains Mono', monospace" fill="#fff">proofCenter.ts</text>
+    <text x="80" y="62" text-anchor="middle" font-size="8" fill="#d1fae5">open in any browser</text>
+    <text x="80" y="74" text-anchor="middle" font-size="8" fill="#d1fae5">no Telegram access needed</text>
+  </g>
 
-  <!-- Memory to Storage (blue arrow going left) -->
-  <path d="M 895 329 L 895 380 L 460 380 L 460 405" stroke="#1565c0" stroke-width="2" fill="none" marker-end="url(#arrowBlue)"/>
-  <text x="905" y="352" font-size="9" font-weight="600" fill="#1565c0">uploadJson</text>
-  <text x="905" y="364" font-size="9" font-weight="600" fill="#1565c0">downloadJson</text>
+  <!-- Arrows between pipeline steps -->
+  <g stroke="#6d28d9" stroke-width="2" fill="none">
+    <line x1="220" y1="210" x2="235" y2="210" marker-end="url(#arrowShield)"/>
+    <line x1="395" y1="210" x2="410" y2="210" marker-end="url(#arrowShield)"/>
+    <line x1="570" y1="210" x2="585" y2="210" marker-end="url(#arrowShield)"/>
+    <line x1="745" y1="210" x2="760" y2="210" marker-end="url(#arrowShield)"/>
+    <line x1="920" y1="210" x2="935" y2="210" marker-end="url(#arrowShield)"/>
+  </g>
 
-  <!-- Section divider -->
-  <line x1="40" y1="420" x2="1160" y2="420" stroke="#d1d5db" stroke-width="1" stroke-dasharray="6,4"/>
-  <rect x="520" y="410" width="160" height="20" rx="10" fill="#eef0f4"/>
-  <text x="600" y="424" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">0G DECENTRALIZED STACK</text>
+  <!-- Decision rules footnote -->
+  <rect x="40" y="275" width="1120" height="48" rx="6" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="60" y="294" font-size="10" font-weight="600" fill="#374151">Decision rules:</text>
+  <text x="60" y="310" font-size="9" fill="#6b7280">① No new wallet features unless they strengthen proof, safety, or 0G dependency.   ② Every feature must answer: what breaks if 0G is removed?   ③ Every live demo must end with a public verification link, not a claim.</text>
 
-  <!-- LAYER 4: 0G Primitives (4 columns) -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 2: APPLICATION CORE                                          -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <text x="40" y="348" font-size="13" font-weight="700" fill="#818cf8">APPLICATION CORE</text>
+
+  <!-- Telegram -->
+  <rect x="40" y="360" width="130" height="60" rx="30" fill="url(#tgGrad)" filter="url(#shadowDeep)"/>
+  <text x="105" y="388" text-anchor="middle" font-size="14" font-weight="600" fill="#fff">Telegram</text>
+  <text x="105" y="407" text-anchor="middle" font-size="11" fill="#d0e8f5">User</text>
+  <line x1="170" y1="390" x2="285" y2="390" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- grammY Bot -->
+  <rect x="290" y="355" width="240" height="70" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="410" y="380" text-anchor="middle" font-size="15" font-weight="700" fill="#1a1a2e">grammY Bot</text>
+  <text x="410" y="398" text-anchor="middle" font-size="11" fill="#6b7280">src/bot.ts</text>
+  <text x="410" y="413" text-anchor="middle" font-size="10" fill="#9ca3af">Bot(config.TELEGRAM_BOT_TOKEN)</text>
+  <line x1="530" y1="390" x2="645" y2="390" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- AI Agent Loop -->
+  <rect x="650" y="350" width="240" height="80" rx="10" fill="#fff" stroke="#818cf8" stroke-width="2" filter="url(#shadowDeep)"/>
+  <rect x="650" y="350" width="240" height="28" rx="10" fill="#818cf8"/>
+  <rect x="650" y="368" width="240" height="10" fill="#818cf8"/>
+  <text x="770" y="368" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">AI Agent Loop (TEE-attested)</text>
+  <text x="770" y="392" text-anchor="middle" font-size="11" fill="#4b5563">src/ai/agent.ts</text>
+  <text x="770" y="410" text-anchor="middle" font-size="10" fill="#6b7280">runAgent() max 5 iterations</text>
+  <text x="770" y="423" text-anchor="middle" font-size="10" fill="#6b7280">tools.ts + toolExecutor.ts</text>
+  <line x1="770" y1="430" x2="770" y2="470" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="780" y="454" font-size="10" fill="#6b7280">tool dispatch</text>
+
+  <!-- Tool Executor -->
+  <rect x="40" y="475" width="1120" height="56" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+  <text x="600" y="495" text-anchor="middle" font-size="13" font-weight="600" fill="#374151">Tool Executor  src/ai/toolExecutor.ts  ·  26 LLM-callable tools — value-moving tools only STAGE an action + receipt (never execute without Confirm)</text>
+  <text x="600" y="512" text-anchor="middle" font-size="10" fill="#6b7280">Sends and imports are NOT AI tools — deterministic command + Confirm-button flows so private keys never reach the LLM</text>
+  <line x1="600" y1="531" x2="600" y2="560" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Service boxes (row) -->
+  <g transform="translate(40, 565)">
+    <rect x="0" y="0" width="170" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+    <text x="85" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Wallet Service</text>
+    <text x="85" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/wallet/walletService.ts</text>
+
+    <rect x="180" y="0" width="170" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+    <text x="265" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Send Service</text>
+    <text x="265" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/send/sendService.ts</text>
+
+    <rect x="360" y="0" width="170" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+    <text x="445" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Swap Service</text>
+    <text x="445" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/swap/swapService.ts</text>
+
+    <rect x="540" y="0" width="170" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+    <text x="625" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Intents Engine</text>
+    <text x="625" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/intents/ (DCA + alerts)</text>
+
+    <rect x="720" y="0" width="170" height="44" rx="6" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
+    <text x="805" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Portfolio</text>
+    <text x="805" y="33" text-anchor="middle" font-size="10" fill="#6b7280">src/og/portfolio.ts</text>
+
+    <rect x="900" y="0" width="220" height="44" rx="6" fill="#fff" stroke="#1565c0" stroke-width="1.5" filter="url(#shadow)"/>
+    <text x="1010" y="18" text-anchor="middle" font-size="11" font-weight="600" fill="#1565c0">F1 Memory (0G Storage)</text>
+    <text x="1010" y="33" text-anchor="middle" font-size="10" fill="#1565c0">src/ai/memory.ts</text>
+  </g>
+
+  <!-- F5 Receipt Service (NEW — central to the positioning) -->
+  <g transform="translate(40, 625)">
+    <rect x="0" y="0" width="1120" height="80" rx="8" fill="url(#receiptGrad)" stroke="#6d28d9" stroke-width="2" filter="url(#shadowDeep)"/>
+    <rect x="0" y="0" width="280" height="80" rx="8" fill="#6d28d9"/>
+    <rect x="270" y="0" width="10" height="80" fill="#6d28d9"/>
+    <text x="140" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">🧾 F5 Verified Intent Receipts</text>
+    <text x="140" y="48" text-anchor="middle" font-size="10" fill="#ddd6fe">The dominant primitive — no value moves without one</text>
+    <text x="140" y="64" text-anchor="middle" font-size="9" font-family="'JetBrains Mono', monospace" fill="#ddd6fe">src/receipts/</text>
+
+    <text x="300" y="24" font-size="10" font-weight="600" fill="#5b21b6">Stage → finalize (send, swap):</text>
+    <text x="300" y="38" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">stageSendReceipt() / stageSwapReceipt()</text>
+    <text x="300" y="50" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">finalizeReceipt(receiptId, txHash)</text>
+    <text x="300" y="62" font-size="9" fill="#6b7280">staged pre-Confirm → finalized post-tx → uploaded to 0G Storage</text>
+
+    <text x="300" y="76" font-size="9" fill="#5b21b6">cancelReceipt() / failReceipt() on Cancel or tx revert</text>
+
+    <text x="700" y="24" font-size="10" font-weight="600" fill="#5b21b6">Create-and-upload (dca, alert):</text>
+    <text x="700" y="38" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">createDcaCreationReceipt() / createDcaExecutionReceipt()</text>
+    <text x="700" y="50" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">createAlertCreationReceipt() / createAlertFireReceipt()</text>
+    <text x="700" y="62" font-size="9" fill="#6b7280">emitted in one shot (no staging) — creation + each execution</text>
+
+    <text x="700" y="76" font-size="9" fill="#5b21b6">createKeyRevealReceipt() — LOCAL-ONLY, never uploaded to 0G Storage</text>
+  </g>
+
+  <!-- Arrow: Receipt Service → 0G Storage (upload receipt) -->
+  <path d="M 1010 705 L 1010 740 L 460 740 L 460 765" stroke="#6d28d9" stroke-width="2" fill="none" marker-end="url(#arrowShield)"/>
+  <text x="650" y="735" font-size="9" font-weight="600" fill="#6d28d9">uploadJson("receipt:&lt;id&gt;", receipt)  →  rootHash indexed in OG_RECEIPT_INDEX_PATH</text>
+
+  <!-- Arrows: Services to 0G Stack -->
+  <path d="M 125 609 L 125 660 L 750 660 L 750 765" stroke="#e65100" stroke-width="1.5" fill="none" marker-end="url(#arrowOrange)"/>
+  <text x="135" y="635" font-size="9" fill="#e65100">balances</text>
+
+  <path d="M 265 609 L 265 650 L 750 650 L 750 765" stroke="#e65100" stroke-width="1.5" fill="none" marker-end="url(#arrowOrange)"/>
+  <text x="275" y="635" font-size="9" fill="#e65100">send tx (stage → finalize receipt)</text>
+
+  <path d="M 445 609 L 445 670 L 1040 670 L 1040 765" stroke="#c2185b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="455" y="635" font-size="9" fill="#c2185b">wrap, swap, approve</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 3: 0G DECENTRALIZED STACK (the precondition, not a feature) -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <line x1="40" y1="745" x2="1160" y2="745" stroke="#d1d5db" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="430" y="735" width="340" height="20" rx="10" fill="#eef0f4"/>
+  <text x="600" y="749" text-anchor="middle" font-size="11" font-weight="600" fill="#6b7280">0G DECENTRALIZED STACK — required before sensitive actions execute</text>
 
   <!-- COLUMN 1: 0G Compute -->
-  <g transform="translate(40, 445)">
-    <rect x="0" y="0" width="260" height="240" rx="10" fill="url(#computeGrad)" stroke="#4caf50" stroke-width="1.5" filter="url(#shadowDeep)"/>
+  <g transform="translate(40, 770)">
+    <rect x="0" y="0" width="260" height="220" rx="10" fill="url(#computeGrad)" stroke="#4caf50" stroke-width="1.5" filter="url(#shadowDeep)"/>
     <rect x="0" y="0" width="260" height="34" rx="10" fill="#2e7d32"/>
     <rect x="0" y="20" width="260" height="14" fill="#2e7d32"/>
     <text x="130" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0G Compute Network</text>
+    <text x="130" y="50" text-anchor="middle" font-size="9" font-weight="600" fill="#1b5e20">Pipeline step 1 — TEE-attested parse</text>
 
-    <text x="130" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#1b5e20">@0gfoundation/0g-compute-ts-sdk</text>
+    <text x="130" y="68" text-anchor="middle" font-size="10" font-weight="600" fill="#1b5e20">@0gfoundation/0g-compute-ts-sdk</text>
 
-    <rect x="10" y="60" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="75" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#2e7d32">src/og/compute.ts</text>
+    <rect x="10" y="78" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
+    <text x="130" y="93" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#2e7d32">src/og/compute.ts + computeBroker.ts</text>
 
-    <rect x="10" y="86" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="101" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#2e7d32">src/og/computeBroker.ts</text>
+    <text x="15" y="120" font-size="10" font-weight="600" fill="#1b5e20">SDK calls:</text>
+    <text x="15" y="135" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">createZGComputeNetworkBroker(wallet)</text>
+    <text x="15" y="149" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">broker.inference.listService(0, 50, false)</text>
+    <text x="15" y="163" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">broker.inference.getServiceMetadata(addr)</text>
+    <text x="15" y="177" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">broker.inference.processResponse(addr, id)</text>
+    <text x="15" y="191" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">broker.ledger.getLedger() / addLedger()</text>
 
-    <text x="15" y="130" font-size="10" font-weight="600" fill="#1b5e20">SDK calls:</text>
-    <text x="15" y="145" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">createZGComputeNetworkBroker(wallet)</text>
-    <text x="15" y="159" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.inference.listService(0, 50, false)</text>
-    <text x="15" y="173" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.inference.getServiceMetadata(addr)</text>
-    <text x="15" y="187" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.inference.getRequestHeaders(addr)</text>
-    <text x="15" y="201" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.inference.acknowledgeProviderSigner(addr)</text>
-    <text x="15" y="215" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.inference.processResponse(addr, id)</text>
-    <text x="15" y="229" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.ledger.getLedger() / addLedger()</text>
-    <text x="15" y="243" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">broker.ledger.transferFund(addr, service)</text>
+    <rect x="10" y="198" width="240" height="16" rx="4" fill="#fff3e0"/>
+    <text x="130" y="210" text-anchor="middle" font-size="8" font-style="italic" fill="#bf360c">Remove this → no hardware-attested proof. A reply could be tampered with.</text>
   </g>
 
   <!-- COLUMN 2: 0G Storage -->
-  <g transform="translate(330, 445)">
-    <rect x="0" y="0" width="260" height="210" rx="10" fill="url(#storageGrad)" stroke="#2196f3" stroke-width="1.5" filter="url(#shadowDeep)"/>
+  <g transform="translate(330, 770)">
+    <rect x="0" y="0" width="260" height="220" rx="10" fill="url(#storageGrad)" stroke="#2196f3" stroke-width="1.5" filter="url(#shadowDeep)"/>
     <rect x="0" y="0" width="260" height="34" rx="10" fill="#1565c0"/>
     <rect x="0" y="20" width="260" height="14" fill="#1565c0"/>
     <text x="130" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0G Storage</text>
+    <text x="130" y="50" text-anchor="middle" font-size="9" font-weight="600" fill="#0d47a1">Pipeline step 5 — receipts + permanent memory</text>
 
-    <text x="130" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#0d47a1">@0gfoundation/0g-storage-ts-sdk</text>
+    <text x="130" y="68" text-anchor="middle" font-size="10" font-weight="600" fill="#0d47a1">@0gfoundation/0g-storage-ts-sdk</text>
 
-    <rect x="10" y="60" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="75" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#1565c0">src/og/fileStorage.ts (File Mode)</text>
+    <rect x="10" y="78" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
+    <text x="130" y="93" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#1565c0">src/og/fileStorage.ts (File Mode)</text>
 
-    <text x="15" y="108" font-size="10" font-weight="600" fill="#0d47a1">SDK calls (File Mode):</text>
-    <text x="15" y="123" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">new Indexer(config.OG_INDEXER_RPC)</text>
-    <text x="15" y="137" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">new MemData(bytes) .merkleTree()</text>
-    <text x="15" y="151" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">indexer.upload(memData, rpc, wallet)</text>
-    <text x="15" y="165" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">indexer.downloadToBlob(rootHash)</text>
+    <text x="15" y="120" font-size="10" font-weight="600" fill="#0d47a1">SDK calls (File Mode):</text>
+    <text x="15" y="135" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">new Indexer(config.OG_INDEXER_RPC)</text>
+    <text x="15" y="149" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">new MemData(bytes) .merkleTree()</text>
+    <text x="15" y="163" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">indexer.upload(memData, rpc, wallet)</text>
+    <text x="15" y="177" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">indexer.downloadToBlob(rootHash)</text>
+
+    <rect x="10" y="188" width="240" height="22" rx="4" fill="#ede9fe" stroke="#6d28d9" stroke-width="1"/>
+    <text x="130" y="202" text-anchor="middle" font-size="9" font-family="'JetBrains Mono', monospace" fill="#6d28d9">namespace: receipt:&lt;receiptId&gt;</text>
+    <text x="130" y="213" text-anchor="middle" font-size="8" fill="#5b21b6">own rootHash → /verify/:root</text>
+
+    <rect x="10" y="198" width="240" height="16" rx="4" fill="#fff3e0"/>
+    <text x="130" y="210" text-anchor="middle" font-size="8" font-style="italic" fill="#bf360c">Remove this → no immutable receipt home. A judge cannot verify anything.</text>
   </g>
 
   <!-- COLUMN 3: 0G Chain -->
-  <g transform="translate(620, 445)">
-    <rect x="0" y="0" width="260" height="240" rx="10" fill="url(#chainGrad)" stroke="#ff9800" stroke-width="1.5" filter="url(#shadowDeep)"/>
+  <g transform="translate(620, 770)">
+    <rect x="0" y="0" width="260" height="220" rx="10" fill="url(#chainGrad)" stroke="#ff9800" stroke-width="1.5" filter="url(#shadowDeep)"/>
     <rect x="0" y="0" width="260" height="34" rx="10" fill="#e65100"/>
     <rect x="0" y="20" width="260" height="14" fill="#e65100"/>
     <text x="130" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">0G Chain (Galileo)</text>
+    <text x="130" y="50" text-anchor="middle" font-size="9" font-weight="600" fill="#bf360c">Pipeline step 4 — deterministic settlement</text>
 
-    <text x="130" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#bf360c">ethers v6  Chain ID 16602</text>
+    <text x="130" y="68" text-anchor="middle" font-size="10" font-weight="600" fill="#bf360c">ethers v6  Chain ID 16602</text>
 
-    <rect x="10" y="60" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="75" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#e65100">src/og/chain.ts</text>
+    <rect x="10" y="78" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
+    <text x="130" y="93" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#e65100">src/og/chain.ts</text>
 
-    <text x="15" y="102" font-size="10" font-weight="600" fill="#bf360c">ethers API calls:</text>
-    <text x="15" y="117" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">new Network(0g-galileo, 16602)</text>
-    <text x="15" y="131" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">new JsonRpcProvider(config.OG_RPC)</text>
-    <text x="15" y="145" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">new Wallet(key, provider)</text>
-    <text x="15" y="159" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">provider.getBalance(address)</text>
-    <text x="15" y="173" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">wallet.sendTransaction({to, value})</text>
+    <text x="15" y="120" font-size="10" font-weight="600" fill="#bf360c">ethers API calls:</text>
+    <text x="15" y="135" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">new Network(0g-galileo, 16602)</text>
+    <text x="15" y="149" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">new JsonRpcProvider(config.OG_RPC)</text>
+    <text x="15" y="163" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">new Wallet(key, provider)</text>
+    <text x="15" y="177" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">provider.getBalance(address)</text>
+    <text x="15" y="191" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">wallet.sendTransaction({to, value})</text>
 
-    <rect x="10" y="192" width="240" height="36" rx="4" fill="#fff" fill-opacity="0.5"/>
-    <text x="130" y="207" text-anchor="middle" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#bf360c">RPC: evmrpc-testnet.0g.ai</text>
-    <text x="130" y="220" text-anchor="middle" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#bf360c">Explorer: chainscan-galileo.0g.ai</text>
+    <rect x="10" y="198" width="240" height="16" rx="4" fill="#fff3e0"/>
+    <text x="130" y="210" text-anchor="middle" font-size="8" font-style="italic" fill="#bf360c">Remove this → no deterministic settlement for the executed intent.</text>
   </g>
 
   <!-- COLUMN 4: Self-deployed Contracts -->
-  <g transform="translate(910, 445)">
-    <rect x="0" y="0" width="260" height="295" rx="10" fill="url(#dexGrad)" stroke="#e91e63" stroke-width="1.5" filter="url(#shadowDeep)"/>
+  <g transform="translate(910, 770)">
+    <rect x="0" y="0" width="260" height="220" rx="10" fill="url(#dexGrad)" stroke="#e91e63" stroke-width="1.5" filter="url(#shadowDeep)"/>
     <rect x="0" y="0" width="260" height="34" rx="10" fill="#c2185b"/>
     <rect x="0" y="20" width="260" height="14" fill="#c2185b"/>
     <text x="130" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">Self-deployed Contracts</text>
-
-    <text x="130" y="50" text-anchor="middle" font-size="10" font-weight="600" fill="#880e4f">ethers Contract + Custom ABIs</text>
+    <text x="130" y="50" text-anchor="middle" font-size="9" font-weight="600" fill="#880e4f">ethers Contract + Custom ABIs</text>
 
     <rect x="10" y="60" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="75" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#c2185b">src/og/dex.ts</text>
+    <text x="130" y="75" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#c2185b">src/og/dex.ts</text>
     <rect x="10" y="86" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="101" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#c2185b">src/og/wog.ts</text>
-    <rect x="10" y="112" width="240" height="22" rx="4" fill="#fff" fill-opacity="0.7"/>
-    <text x="130" y="127" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#c2185b">src/og/erc20.ts</text>
+    <text x="130" y="101" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#c2185b">src/og/wog.ts  ·  erc20.ts</text>
 
-    <text x="15" y="155" font-size="10" font-weight="600" fill="#880e4f">Contract interfaces:</text>
-    <text x="15" y="170" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">WOG (WETH9 clone)  wog.ts</text>
-    <text x="15" y="184" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">Uniswap-V2 Router  dex.ts</text>
-    <text x="15" y="198" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">Uniswap-V2 Factory  dex.ts</text>
-    <text x="15" y="212" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">ERC-20 (USDC, USDT)  erc20.ts</text>
+    <text x="15" y="130" font-size="10" font-weight="600" fill="#880e4f">Contract interfaces:</text>
+    <text x="15" y="145" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">WOG (WETH9 clone)</text>
+    <text x="15" y="159" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">Uniswap-V2 Router</text>
+    <text x="15" y="173" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">Uniswap-V2 Factory</text>
+    <text x="15" y="187" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">ERC-20 (USDC, USDT)</text>
+    <text x="15" y="201" font-size="9" font-family="'JetBrains Mono', monospace" fill="#374151">GalileoProfileNFT (soulbound)</text>
 
-    <text x="15" y="237" font-size="10" font-weight="600" fill="#880e4f">Deployment scripts:</text>
-    <text x="15" y="252" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">scripts/deployWog.ts</text>
-    <text x="15" y="264" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">scripts/deployMockTokens.ts</text>
-    <text x="15" y="276" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">scripts/deployDex.ts</text>
-    <text x="15" y="288" font-size="9" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#374151">scripts/seedLiquidity.ts</text>
+    <text x="15" y="216" font-size="9" font-family="'JetBrains Mono', monospace" fill="#6b7280">deploy scripts: deployWog / deployDex / deployNft</text>
   </g>
 
-  <!-- FOOTER: Endpoints and Commands -->
-  <g transform="translate(0, 760)">
-    <rect x="40" y="0" width="600" height="70" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="60" y="22" font-size="12" font-weight="600" fill="#374151">Public Endpoints (src/health.ts, port 8080)</text>
-    <text x="60" y="40" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#6b7280">GET /health  {"status":"ok","uptime":N}</text>
-    <text x="60" y="56" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#6b7280">GET /proofs  public/proofs.json (nightly proof index)</text>
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 4: PUBLIC VERIFICATION (the canonical end-of-demo link)     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 1010)">
+    <rect x="0" y="0" width="1120" height="80" rx="10" fill="url(#verifyGrad)" filter="url(#shadowDeep)"/>
+    <text x="560" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">🌐  PUBLIC PROOF CENTER  ·  every action ends with a verification link, not a claim</text>
+    <text x="560" y="48" text-anchor="middle" font-size="11" fill="#d1fae5">A judge can verify any receipt from a browser by root hash — no Telegram access, no screenshots, no trust required.</text>
 
-    <rect x="660" y="0" width="500" height="70" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-    <text x="680" y="22" font-size="12" font-weight="600" fill="#374151">Bot Commands (src/bot.ts)</text>
-    <text x="680" y="40" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#6b7280">/proof  last 10 TEE-verified chat proofs</text>
-    <text x="680" y="56" font-size="10" font-family="'JetBrains Mono', 'Cascadia Code', monospace" fill="#6b7280">/portfolio  wallet balances + USD prices</text>
+    <text x="560" y="68" text-anchor="middle" font-size="10" font-family="'JetBrains Mono', monospace" fill="#fff">/verify/:rootHash  (canonical)   ·   /proofs   ·   /status   ·   /intents/live   ·   Telegram /receipt</text>
   </g>
 
   <!-- LEGEND -->
-  <g transform="translate(40, 855)">
-    <rect x="0" y="0" width="1120" height="40" rx="6" fill="#f3f4f6"/>
-    <rect x="15" y="12" width="12" height="12" rx="2" fill="#2e7d32"/>
-    <text x="33" y="22" font-size="10" fill="#4b5563">@0gfoundation/0g-compute-ts-sdk</text>
-    <rect x="220" y="12" width="12" height="12" rx="2" fill="#1565c0"/>
-    <text x="238" y="22" font-size="10" fill="#4b5563">@0gfoundation/0g-storage-ts-sdk</text>
-    <rect x="425" y="12" width="12" height="12" rx="2" fill="#e65100"/>
-    <text x="443" y="22" font-size="10" fill="#4b5563">ethers v6</text>
-    <rect x="535" y="12" width="12" height="12" rx="2" fill="#c2185b"/>
-    <text x="553" y="22" font-size="10" fill="#4b5563">Self-deployed (ethers Contract)</text>
-    <rect x="755" y="12" width="12" height="12" rx="2" fill="#818cf8"/>
-    <text x="773" y="22" font-size="10" fill="#4b5563">Application Core</text>
-    <rect x="890" y="12" width="12" height="12" rx="2" fill="#1e96c8"/>
-    <text x="908" y="22" font-size="10" fill="#4b5563">Telegram / grammY</text>
+  <g transform="translate(40, 1110)">
+    <rect x="0" y="0" width="1120" height="50" rx="6" fill="#f3f4f6"/>
+    <text x="15" y="18" font-size="10" font-weight="600" fill="#374151">Legend:</text>
+    <rect x="80" y="8" width="12" height="12" rx="2" fill="#6d28d9"/>
+    <text x="98" y="18" font-size="10" fill="#4b5563">Verifiable Intent Pipeline (F5)</text>
+    <rect x="290" y="8" width="12" height="12" rx="2" fill="#2e7d32"/>
+    <text x="308" y="18" font-size="10" fill="#4b5563">0G Compute (TEE)</text>
+    <rect x="440" y="8" width="12" height="12" rx="2" fill="#1565c0"/>
+    <text x="458" y="18" font-size="10" fill="#4b5563">0G Storage</text>
+    <rect x="560" y="8" width="12" height="12" rx="2" fill="#e65100"/>
+    <text x="578" y="18" font-size="10" fill="#4b5563">0G Chain</text>
+    <rect x="660" y="8" width="12" height="12" rx="2" fill="#c2185b"/>
+    <text x="678" y="18" font-size="10" fill="#4b5563">Self-deployed contracts</text>
+    <rect x="840" y="8" width="12" height="12" rx="2" fill="#818cf8"/>
+    <text x="858" y="18" font-size="10" fill="#4b5563">Application core</text>
+    <rect x="980" y="8" width="12" height="12" rx="2" fill="#047857"/>
+    <text x="998" y="18" font-size="10" fill="#4b5563">Public verification</text>
+
+    <text x="15" y="40" font-size="9" font-style="italic" fill="#6b7280">Each 0G layer is annotated with: what breaks if 0G is removed?  ·  Remove any one layer and Galileo cannot credibly claim to be a verifiable AI wallet.</text>
   </g>
 </svg>

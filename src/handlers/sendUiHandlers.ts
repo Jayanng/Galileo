@@ -61,6 +61,8 @@ export async function stageSend(
     amount: string;
     recipientKind?: 'address' | 'username';
     resolvedUsername?: string;
+    rawInput?: string;
+    source?: 'command' | 'nl' | 'button';
   },
 ): Promise<void> {
   const resolved = await resolveAndReply(ctx, userId, draft.to);
@@ -75,6 +77,8 @@ export async function stageSend(
     amount: draft.amount,
     recipientKind: r.kind,
     resolvedUsername: r.kind === 'username' ? r.username : undefined,
+    rawInput: draft.rawInput,
+    source: draft.source,
   });
   if (!res.ok) {
     await ctx.reply(`⚠️ ${res.error}`);
@@ -141,6 +145,7 @@ export async function handleSendAmountReply(ctx: Context, text: string): Promise
     amount: m[1]!,
     recipientKind: draft.recipientKind,
     resolvedUsername: draft.resolvedUsername,
+    source: 'button',
   });
 }
 
@@ -152,14 +157,15 @@ export async function handleSendCommand(ctx: Context): Promise<void> {
 
   if (parts.length >= 2) {
     const [a, b] = parts;
+    const cmdRaw = ctx.message?.text;
 
     // 0x address in either slot.
     if (isAddress(a!)) {
-      await stageSend(ctx, userId, { to: a!, amount: b!, recipientKind: 'address' });
+      await stageSend(ctx, userId, { to: a!, amount: b!, recipientKind: 'address', rawInput: cmdRaw, source: 'command' });
       return;
     }
     if (isAddress(b!)) {
-      await stageSend(ctx, userId, { to: b!, amount: a!, recipientKind: 'address' });
+      await stageSend(ctx, userId, { to: b!, amount: a!, recipientKind: 'address', rawInput: cmdRaw, source: 'command' });
       return;
     }
 
@@ -168,12 +174,12 @@ export async function handleSendCommand(ctx: Context): Promise<void> {
     // through resolveAndReply (same path as parseSendText).
     const handleA = extractHandle(a!);
     if (handleA) {
-      await stageSend(ctx, userId, { to: '@' + handleA, amount: b! });
+      await stageSend(ctx, userId, { to: '@' + handleA, amount: b!, rawInput: cmdRaw, source: 'command' });
       return;
     }
     const handleB = extractHandle(b!);
     if (handleB) {
-      await stageSend(ctx, userId, { to: '@' + handleB, amount: a! });
+      await stageSend(ctx, userId, { to: '@' + handleB, amount: a!, rawInput: cmdRaw, source: 'command' });
       return;
     }
   }

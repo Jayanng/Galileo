@@ -16,6 +16,7 @@ import { pingCompute } from './og/compute';
 import { provider } from './og/chain';
 import { config } from './config';
 import { intentStore } from './intents/intentStore';
+import { looksLikeReceipt, type IntentReceipt } from './receipts';
 
 // ─── HTML shell ──────────────────────────────────────────────────────────
 
@@ -62,10 +63,252 @@ function redactUserId(uid: string): string {
 function statusBadge(status: string): string {
   const map: Record<string, string> = {
     ok: 'badge-ok', success: 'badge-ok', active: 'badge-ok', verified: 'badge-ok',
-    fired: 'badge-warn', pending: 'badge-pending', paused: 'badge-warn',
+    executed: 'badge-ok', pass: 'badge-ok',
+    fired: 'badge-warn', pending: 'badge-pending', staged: 'badge-pending',
+    paused: 'badge-warn', cancelled: 'badge-warn', fail: 'badge-fail',
     failed: 'badge-fail', error: 'badge-fail',
   };
   return `<span class="badge ${map[status] ?? 'badge-pending'}">${status}</span>`;
+}
+
+// ─── Receipt rendering (F5) ─────────────────────────────────────────────────
+
+function fmtTs(ts: number): string {
+  return new Date(ts).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+
+function renderReceipt(r: IntentReceipt): string {
+  const typeIcon =
+    r.actionType === 'send' ? '📤' :
+    r.actionType === 'swap' ? '🔄' :
+    r.actionType === 'dca' ? '📊' :
+    r.actionType === 'alert' ? '🔔' :
+    r.actionType === 'key_reveal' ? '🔐' : '🧾';
+  const checksRows = r.riskChecks
+    .map(
+      (c) =>
+        `<tr><td class="mono">${c.check}</td><td>${statusBadge(c.status)}</td><td class="mono">${fmtTs(c.ts)}</td></tr>`,
+    )
+    .join('\n');
+
+  const computeBlock = r.compute
+    ? `<div><span class="muted">Provider</span><br><strong class="mono">${redact(r.compute.provider, 16)}</strong></div>
+       <div><span class="muted">TEE Verified</span><br>${statusBadge(r.compute.verified ? 'verified' : 'fail')}</div>
+       <div><span class="muted">Chat ID</span><br><strong class="mono">${redact(r.compute.chatId, 18)}</strong></div>`
+    : `<div class="muted" style="grid-column:1/-1">N/A — command-driven action (no LLM turn; keys never reached the AI agent).</div>`;
+
+  const txLine = r.chain.txHash
+    ? `<a href="https://chainscan-galileo.0g.ai/tx/${r.chain.txHash}" target="_blank" class="mono">${redact(r.chain.txHash, 20)}</a>`
+    : '<span class="muted">—</span>';
+  const rootLine = r.storage.rootHash
+    ? `<span class="mono">${redact(r.storage.rootHash, 20)}</span>`
+    : '<span class="muted">— (not yet uploaded)</span>';
+
+  // Action-type-specific "Parsed Intent" section.
+  const parsedSection =
+    r.actionType === 'send'
+      ? renderSendParsed(r)
+      : r.actionType === 'swap'
+        ? renderSwapParsed(r)
+        : r.actionType === 'dca'
+          ? renderDcaParsed(r)
+          : r.actionType === 'alert'
+            ? renderAlertParsed(r)
+            : r.actionType === 'key_reveal'
+              ? renderKeyRevealParsed(r)
+              : '<div class="muted">Unknown action type.</div>';
+
+  // Optional intent link block (DCA execution / alert fire receipts).
+  const intentLinkSection =
+    'intentLink' in r && r.intentLink
+      ? `<div class="card">
+          <h2>Intent Link</h2>
+          <div class="grid">
+            <div><span class="muted">Intent ID</span><br><strong class="mono">${r.intentLink.intentId}</strong></div>
+            <div><span class="muted">Creation Receipt</span><br><strong class="mono">${r.intentLink.creationReceiptId ? redact(r.intentLink.creationReceiptId, 18) : '—'}</strong></div>
+          </div>
+        </div>`
+      : '';
+
+  // Optional notification block (alert fire receipts only).
+  const notificationSection =
+    'notification' in r && r.notification
+      ? `<div class="card">
+          <h2>Notification</h2>
+          <div class="grid">
+            <div><span class="muted">Method</span><br><strong>${r.notification.method}</strong></div>
+            <div><span class="muted">Sent At</span><br><strong class="mono">${fmtTs(r.notification.sentAt)}</strong></div>
+            <div><span class="muted">Chat ID</span><br><strong class="mono">${redactUserId(r.notification.chatId)}</strong></div>
+          </div>
+        </div>`
+      : '';
+
+  return `
+    <div class="card">
+      <h2>${typeIcon} Verified Intent Receipt</h2>
+      <div class="grid">
+        <div><span class="muted">Action</span><br><strong>${r.actionType}</strong></div>
+        <div><span class="muted">Status</span><br>${statusBadge(r.status)}</div>
+        <div><span class="muted">Receipt ID</span><br><strong class="mono">${redact(r.receiptId, 18)}</strong></div>
+        <div><span class="muted">Created</span><br><strong class="mono">${fmtTs(r.createdAt)}</strong></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>1 · User Intent</h2>
+      <div class="grid">
+        <div><span class="muted">Instruction</span><br><strong>${r.userIntent.raw}</strong></div>
+        <div><span class="muted">Source</span><br><strong>${r.userIntent.source}</strong></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Parsed Intent</h2>
+      <div class="grid">${parsedSection}</div>
+    </div>
+
+    <div class="card">
+      <h2>3 · Risk Checks</h2>
+      <table>
+        <thead><tr><th>Check</th><th>Status</th><th>Timestamp</th></tr></thead>
+        <tbody>${checksRows}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>4 · Compute (TEE)</h2>
+      <div class="grid">${computeBlock}</div>
+    </div>
+
+    <div class="card">
+      <h2>5 · Confirmation</h2>
+      <div class="grid">
+        <div><span class="muted">Required</span><br>${statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>
+        <div><span class="muted">Method</span><br><strong>${r.confirmation.method}</strong></div>
+        <div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>
+      </div>
+    </div>
+
+    ${notificationSection}
+
+    <div class="card">
+      <h2>6 · Chain</h2>
+      <div class="grid">
+        <div><span class="muted">Tx Hash</span><br>${txLine}</div>
+      </div>
+    </div>
+
+    ${intentLinkSection}
+
+    <div class="card">
+      <h2>7 · Storage</h2>
+      <div class="grid">
+        <div><span class="muted">Root Hash</span><br>${rootLine}</div>
+      </div>
+    </div>
+  `;
+}
+
+/** Send-specific parsed-intent grid (recipient + amount + wallet). */
+function renderSendParsed(r: Extract<IntentReceipt, { actionType: 'send' }>): string {
+  const recipient = r.parsedIntent.recipient;
+  const recipientLine =
+    recipient.kind === 'username'
+      ? `${recipient.value} → <span class="mono">${redact(recipient.resolvedAddress, 16)}</span>`
+      : `<span class="mono">${redact(recipient.resolvedAddress, 20)}</span>`;
+  return `
+    <div><span class="muted">Type</span><br><strong>${r.parsedIntent.type}</strong></div>
+    <div><span class="muted">Amount</span><br><strong>${r.parsedIntent.amount} ${r.parsedIntent.asset}</strong></div>
+    <div><span class="muted">Recipient</span><br>${recipientLine}</div>
+    <div><span class="muted">From Wallet</span><br><strong>${r.parsedIntent.fromWalletName}</strong></div>
+  `;
+}
+
+/** Swap-specific parsed-intent grid (kind, route, slippage, approval, path). */
+function renderSwapParsed(r: Extract<IntentReceipt, { actionType: 'swap' }>): string {
+  const p = r.parsedIntent;
+  const kindLabel = p.kind === 'wrap' ? 'Wrap (1:1)' : p.kind === 'unwrap' ? 'Unwrap (1:1)' : 'DEX swap';
+  const routeLine =
+    p.kind === 'dex'
+      ? `<div><span class="muted">Route</span><br><strong>${p.fromToken} → ${p.toToken}</strong></div>
+         <div><span class="muted">Route Kind</span><br><strong>${p.routeKind ?? '—'}</strong></div>`
+      : `<div><span class="muted">Route</span><br><strong>${p.fromToken} → ${p.toToken}</strong></div>
+         <div><span class="muted">Kind</span><br><strong>${kindLabel}</strong></div>`;
+  const slippageLine =
+    p.kind === 'dex' && p.slippageBps !== undefined
+      ? `<div><span class="muted">Slippage</span><br><strong>${(p.slippageBps / 100).toFixed(2)}%</strong></div>
+         <div><span class="muted">Min Received</span><br><strong>${p.minOut ?? '—'}</strong></div>`
+      : '';
+  const approvalLine =
+    p.kind === 'dex'
+      ? `<div><span class="muted">Approval Needed</span><br>${statusBadge(p.approvalNeeded ? 'pending' : 'ok')}</div>`
+      : '';
+  const pathLine =
+    p.kind === 'dex' && p.path && p.path.length > 0
+      ? `<div style="grid-column:1/-1"><span class="muted">DEX Path</span><br><strong class="mono">${p.path
+          .map((h) => redact(h, 12))
+          .join(' → ')}</strong></div>`
+      : '';
+  return `
+    <div><span class="muted">Type</span><br><strong>${p.type}</strong></div>
+    <div><span class="muted">Kind</span><br><strong>${kindLabel}</strong></div>
+    <div><span class="muted">Amount In</span><br><strong>${p.amountIn}</strong></div>
+    <div><span class="muted">Est. Out</span><br><strong>${p.estOut}</strong></div>
+    ${routeLine}
+    ${slippageLine}
+    ${approvalLine}
+    <div><span class="muted">From Wallet</span><br><strong>${p.fromWalletName}</strong></div>
+    ${pathLine}
+  `;
+}
+
+/** DCA-specific parsed-intent grid (schedule, route, wallet). */
+function renderDcaParsed(r: Extract<IntentReceipt, { actionType: 'dca' }>): string {
+  const p = r.parsedIntent;
+  return `
+    <div><span class="muted">Type</span><br><strong>${p.type}</strong></div>
+    <div><span class="muted">Route</span><br><strong>${p.fromToken} → ${p.toToken}</strong></div>
+    <div><span class="muted">Amount</span><br><strong>${p.amount}</strong></div>
+    <div><span class="muted">Schedule</span><br><strong>${p.scheduleRaw}</strong></div>
+    <div><span class="muted">Interval</span><br><strong>${(p.scheduleIntervalMs / 1000 / 60).toFixed(0)} min</strong></div>
+    <div><span class="muted">From Wallet</span><br><strong>${p.walletName ?? '—'}</strong></div>
+  `;
+}
+
+/** Alert-specific parsed-intent grid (condition, trigger price, price source). */
+function renderAlertParsed(r: Extract<IntentReceipt, { actionType: 'alert' }>): string {
+  const p = r.parsedIntent;
+  const opText =
+    p.operator === '<' ? 'below' :
+    p.operator === '>' ? 'above' :
+    p.operator === '<=' ? 'at or below' : 'at or above';
+  return `
+    <div><span class="muted">Type</span><br><strong>${p.type}</strong></div>
+    <div><span class="muted">Symbol</span><br><strong>${p.symbol}</strong></div>
+    <div><span class="muted">Condition</span><br><strong>${p.symbol} ${opText} $${p.threshold}</strong></div>
+    <div><span class="muted">Price Source</span><br><strong>${p.priceSource ?? '—'}</strong></div>
+    ${p.triggerPrice !== undefined ? `<div><span class="muted">Trigger Price</span><br><strong>$${p.triggerPrice}</strong></div>` : ''}
+    <div><span class="muted">CoinGecko ID</span><br><strong class="mono">${p.coingeckoId}</strong></div>
+  `;
+}
+
+/** Key-reveal-specific parsed-intent grid (wallet, method, secret kind — redacted). */
+function renderKeyRevealParsed(r: Extract<IntentReceipt, { actionType: 'key_reveal' }>): string {
+  const p = r.parsedIntent;
+  const methodLabel =
+    p.revealMethod === 'command_privatekey' ? '/privatekey command' :
+    p.revealMethod === 'button_export' ? 'Settings → Export private key' :
+    p.revealMethod === 'button_new_wallet' ? 'New wallet button' :
+    '/wallet command';
+  const secretLabel = p.secretKind === 'recovery_phrase' ? 'Recovery phrase (BIP-39)' : 'Private key';
+  return `
+    <div><span class="muted">Type</span><br><strong>${p.type}</strong></div>
+    <div><span class="muted">Secret Kind</span><br><strong>${secretLabel}</strong></div>
+    <div><span class="muted">Wallet</span><br><strong>${p.walletName}</strong></div>
+    <div><span class="muted">Wallet Address</span><br><strong class="mono">${redact(p.walletAddress, 16)}</strong></div>
+    <div><span class="muted">Reveal Method</span><br><strong>${methodLabel}</strong></div>
+    <div class="muted" style="grid-column:1/-1">⚠️ Local-only receipt — never uploaded to 0G Storage. No AI tool had access to the key (deterministic command/button flow).</div>
+  `;
 }
 
 // ─── /proofs — Live feed of recent verified proofs ────────────────────────
@@ -159,12 +402,11 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
         ${rootHash ? `<div><span class="muted">Root Hash</span><br><strong class="mono">${redact(rootHash, 20)}</strong></div>` : ''}
       </div>
     </div>
-    ${recovered ? `
-    <div class="card">
-      <h2>Recovered Data</h2>
-      <pre>${JSON.stringify(recovered, null, 2).slice(0, 4000)}</pre>
-    </div>
-    ` : `
+    ${recovered ? (
+      looksLikeReceipt(recovered)
+        ? renderReceipt(recovered as IntentReceipt)
+        : `<div class="card"><h2>Recovered Data</h2><pre>${JSON.stringify(recovered, null, 2).slice(0, 4000)}</pre></div>`
+    ) : `
     <div class="card">
       <p class="muted">No data recovered. ${config.OG_STORAGE_ENABLED ? 'The record may not exist or storage is unavailable.' : '0G Storage is disabled — receipts are only available locally.'}</p>
     </div>

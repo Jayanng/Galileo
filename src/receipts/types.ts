@@ -48,6 +48,8 @@ export const RiskCheckSchema = z.object({
     'wallet_first_creation', 'no_existing_profile', 'metadata_uploaded',
     // Cancellation (DCA/alert cancel receipts)
     'intent_found',
+    // Recurring send
+    'send_executed',
   ]),
   status: z.enum(['pass', 'fail', 'pending', 'n/a']),
   ts: z.number().int().nonnegative(),

@@ -44,8 +44,10 @@ import { handleSendConfirm, handleSendCancel } from './handlers/sendHandlers';
 import {
   parseDcaText,
   parseAlertText,
+  parseSendScheduleText,
   stageDca,
   stageAlert,
+  stageSendSchedule,
 } from './handlers/intentUiHandlers';
 import {
   handleIntentsCommand,
@@ -237,6 +239,16 @@ export function buildBot(): Bot {
     const parsed = userId ? parseAlertText(ctx.message.text) : null;
     if (!userId || !parsed) return next();
     await stageAlert(ctx, userId, parsed);
+  });
+
+  // 4h) Deterministic recurring-send-phrase matcher: "recurring send 1 OG to @alice weekly"
+  //     and "send 0.1 OG to 0xADDR every day" stage a recurring send directly.
+  //     Falls through to the AI agent on miss.
+  bot.on('message:text', async (ctx, next) => {
+    const userId = ctx.from?.id ? String(ctx.from.id) : null;
+    const parsed = userId ? parseSendScheduleText(ctx.message.text) : null;
+    if (!userId || !parsed) return next();
+    await stageSendSchedule(ctx, userId, parsed);
   });
 
   // 5) AI agent (F2) — natural-language understanding via 0G Compute.

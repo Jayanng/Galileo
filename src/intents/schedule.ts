@@ -21,6 +21,7 @@ const PRESETS: Record<string, number> = {
 };
 
 const EVERY_RE = /^\s*every\s+(\d+)\s+(minute|minutes|min|mins|hour|hours|hr|hrs|day|days)\s*$/i;
+const BARE_INTERVAL_RE = /^\s*(\d+)\s+(minute|minutes|min|mins|hour|hours|hr|hrs|day|days)\s*$/i;
 const WEEKDAY_RE = /^\s*every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*$/i;
 
 const UNIT_MS: Record<string, number> = {
@@ -61,6 +62,17 @@ export function parseSchedule(input: string): Schedule {
     return { raw, kind: 'interval', intervalMs: n * UNIT_MS[unit]! };
   }
 
+  // Bare number+unit without "every": "1 min", "30 mins", "2 hours", "1 day"
+  const bare = BARE_INTERVAL_RE.exec(raw);
+  if (bare) {
+    const n = Number(bare[1]);
+    const unit = bare[2]!.toLowerCase();
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new ScheduleParseError(`Invalid interval "${raw}".`);
+    }
+    return { raw, kind: 'interval', intervalMs: n * UNIT_MS[unit]! };
+  }
+
   if (WEEKDAY_RE.test(raw)) {
     // v1 simplification: weekday-named schedules use a 7-day interval.
     // The day name is preserved in `raw` so the UI can show it accurately.
@@ -68,6 +80,6 @@ export function parseSchedule(input: string): Schedule {
   }
 
   throw new ScheduleParseError(
-    `Unknown schedule "${raw}". Try: "daily", "weekly", "hourly", or "every N minutes/hours/days".`,
+    `Unknown schedule "${raw}". Try: "daily", "weekly", "hourly", "1 min", "30 mins", "2 hours", or "every N minutes/hours/days".`,
   );
 }

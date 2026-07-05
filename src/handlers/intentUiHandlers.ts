@@ -145,6 +145,58 @@ export function parseAlertText(text: string): AlertDraft | null {
   return null;
 }
 
+// ── Recurring send (send schedule) parser ─────────────────────────────────
+
+export interface SendScheduleDraft {
+  recipient: string;
+  amount: string;
+  schedule: string;
+}
+
+/**
+ * Match recurring send phrasings:
+ *   "recurring send 1 OG to @alice daily"
+ *   "recurring send 0.1 to 0xADDR every 6 hours"
+ *   "schedule send 0.5 OG to @bob weekly"
+ *   "send 0.1 OG to @alice every day"
+ *   "recurring transfer 1 OG to 0xADDR hourly"
+ *
+ * Returns the extracted draft or null if the phrase doesn't match.
+ */
+export function parseSendScheduleText(text: string): SendScheduleDraft | null {
+  // "recurring send|recurring transfer|schedule send <amount> [OG] to <recipient> <schedule>"
+  const main = /^(?:recurring\s+(?:send|transfer)|schedule\s+send)\s+([\d.]+)\s*(?:og)?\s+to\s+(\S+)\s+(.+)$/i;
+  let m = main.exec(text.trim());
+  if (m) {
+    return { amount: m[1]!, recipient: m[2]!, schedule: m[3]!.trim() };
+  }
+  // "send <amount> [OG] to <recipient> every|daily|weekly|hourly" — catches "send 0.1 OG to @alice every day"
+  const sendEvery = /^send\s+([\d.]+)\s*(?:og)?\s+to\s+(\S+)\s+(every\s+.+|daily|weekly|hourly|hour|day|week)$/i;
+  m = sendEvery.exec(text.trim());
+  if (m) {
+    return { amount: m[1]!, recipient: m[2]!, schedule: m[3]!.trim() };
+  }
+  return null;
+}
+
+/** Stage a recurring send from a parsed draft. Reuses executeTool for validation. */
+export async function stageSendSchedule(ctx: Context, userId: string, draft: SendScheduleDraft): Promise<void> {
+  const res = await executeTool(userId, 'send_schedule_create', draft);
+  if (!res.success) {
+    await ctx.reply(`⚠️ ${res.error}`);
+    return;
+  }
+  const data = res.data as { id: string; summary: string; schedule: string; nextRunAt: string; receiptId?: string | null; receiptRootHash?: string | null };
+  const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
+  const receiptLine = data.receiptRootHash
+    ? `\n🧾 Receipt: [0x${data.receiptRootHash.slice(2, 12)}…](${PROOF_VERIFY_URL}${data.receiptRootHash})`
+    : '';
+  await ctx.reply(
+    `✅ *Recurring send scheduled*\n${data.summary}\nRuns every: \`${data.schedule}\`\nNext at: \`${data.nextRunAt}\`${receiptLine}\n\nManage: /intents`,
+    { parse_mode: 'Markdown' },
+  );
+}
+
 /** Stage an alert intent from a parsed draft. Reuses executeTool for validation. */
 export async function stageAlert(ctx: Context, userId: string, draft: AlertDraft): Promise<void> {
   const res = await executeTool(userId, 'alert_create', draft);

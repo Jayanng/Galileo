@@ -10,6 +10,7 @@ import {
 } from '../wallet/walletService';
 import type { WalletInfo } from '../wallet/walletService';
 import { formatOG } from '../og/chain';
+import { parseEther } from 'ethers';
 import { search, getRecentProofs, transactionStats } from './memory';
 import { buildPortfolio } from '../og/portfolio';
 import { getPriceUSD, getPriceByCoinGeckoId, KNOWN_SYMBOLS, SYMBOL_TO_COINGECKO_ID } from '../og/prices';
@@ -23,11 +24,13 @@ import {
   isSupportedDcaPath,
   type DcaIntent,
   type AlertIntent,
+  type SendIntent,
 } from '../intents';
 import { getActiveId } from '../wallet/activeWallet';
+import { resolveRecipientToAddress } from '../wallet/recipientResolver';
 import { explainContract } from '../og/contractExplorer';
 import { explainTransaction } from '../og/transactionExplorer';
-import { createDcaCreationReceipt, createAlertCreationReceipt, createCancellationReceipt, type ComputeLeg } from '../receipts';
+import { createDcaCreationReceipt, createAlertCreationReceipt, createCancellationReceipt, createSendCreationReceipt, type ComputeLeg } from '../receipts';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -446,6 +449,121 @@ export async function executeTool(
         };
       }
 
+      case 'send_schedule_create': {
+        const recipient = String(args.recipient ?? '').trim();
+        const amount = String(args.amount ?? '').trim();
+        const scheduleStr = String(args.schedule ?? '').trim();
+        if (!recipient || !amount || !scheduleStr) {
+          const missing = [
+            !recipient && 'recipient',
+            !amount && 'amount',
+            !scheduleStr && 'schedule',
+          ].filter(Boolean);
+          return {
+            success: false,
+            error: `Missing required field(s): ${missing.join(', ')}. Example call: { recipient: '@alice', amount: '0.1', schedule: 'weekly' }.`,
+          };
+        }
+        let schedule;
+        try {
+          schedule = parseSchedule(scheduleStr);
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : String(e) };
+        }
+        const wallets = await listWallets(userId);
+        if (wallets.length === 0) {
+          return { success: false, error: 'You have no wallets yet — send /wallet to create one first.' };
+        }
+        let resolvedWalletId = args.walletId ? String(args.walletId) : undefined;
+        if (resolvedWalletId && !wallets.find((w) => w.id === resolvedWalletId)) {
+          return { success: false, error: 'walletId does not match any of your wallets.' };
+        }
+        if (!resolvedWalletId) {
+          const active = await getActiveId(userId);
+          resolvedWalletId = active ?? wallets[0]!.id;
+        }
+        // Resolve recipient: @username or 0x address
+        const res = await resolveRecipientToAddress(recipient, userId);
+        if ('error' in res) {
+          if (res.error === 'not_found') {
+            return { success: false, error: `Recipient "${recipient}" not found. Ask them to message me once so I can link their wallet.` };
+          }
+          return { success: false, error: `Recipient "${recipient}" has no wallet yet.` };
+        }
+        // TypeScript narrowing — the 'error' checks above handle all error branches
+        if (res.kind !== 'address' && res.kind !== 'username') {
+          return { success: false, error: `Could not resolve recipient "${recipient}".` };
+        }
+        let amountWei: bigint;
+        try {
+          amountWei = parseEther(amount);
+        } catch {
+          return { success: false, error: `Invalid amount "${amount}".` };
+        }
+        if (amountWei <= 0n) {
+          return { success: false, error: 'Amount must be greater than zero.' };
+        }
+        const now = Date.now();
+        const walletName = wallets.find((w) => w.id === resolvedWalletId)?.name;
+        const recipientValue = res.kind === 'username' ? `@${res.username}` : res.address;
+        const intent: SendIntent = {
+          id: newIntentId(),
+          userId,
+          type: 'send',
+          status: 'active',
+          recipient: {
+            kind: res.kind,
+            value: recipientValue,
+            resolvedAddress: res.address,
+          },
+          amount,
+          walletId: resolvedWalletId!,
+          schedule,
+          nextRunAt: computeNextRun(schedule, now),
+          lastExecutedAt: null,
+          createdAt: now,
+        };
+        await intentStore.add(intent);
+        console.log(`[toolExecutor] send_schedule_create id=${intent.id} ${amount} OG→${recipient} ${schedule.raw}`);
+        // F5: emit a send creation receipt (proves the recurring send was set up).
+        let creationReceiptId: string | null = null;
+        let creationReceiptRootHash: string | null = null;
+        try {
+          const creation = await createSendCreationReceipt({
+            userId,
+            intentId: intent.id,
+            recipientKind: res.kind,
+            recipientValue: recipientValue,
+            resolvedAddress: res.address,
+            amount,
+            walletId: resolvedWalletId!,
+            walletName,
+            scheduleRaw: schedule.raw,
+            scheduleIntervalMs: schedule.intervalMs,
+            compute: buildComputeLeg(computeContext),
+          });
+          creationReceiptId = creation.receiptId;
+          creationReceiptRootHash = creation.rootHash;
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+        } catch (e) {
+          console.warn(`[toolExecutor] send_schedule creation receipt failed:`, (e as Error).message);
+        }
+        return {
+          success: true,
+          data: {
+            id: intent.id,
+            type: 'send',
+            summary: summarize(intent),
+            status: intent.status,
+            schedule: intent.schedule.raw,
+            nextRunAt: new Date(intent.nextRunAt).toISOString(),
+            receiptId: creationReceiptId,
+            receiptRootHash: creationReceiptRootHash,
+            note: 'No funds have moved yet — the worker will execute on the next scheduled tick. Use /intents to manage it.',
+          },
+        };
+      }
+
       case 'dca_create': {
         const fromToken = String(args.fromToken ?? '').toUpperCase().trim();
         const toToken = String(args.toToken ?? '').toUpperCase().trim();
@@ -643,15 +761,36 @@ export async function executeTool(
           success: true,
           data: {
             count: intents.length,
-            intents: intents.map((i) => ({
-              id: i.id,
-              type: i.type,
-              summary: summarize(i),
-              status: i.status,
-              ...(i.type === 'dca'
-                ? { schedule: i.schedule.raw, nextRunAt: new Date(i.nextRunAt).toISOString(), lastExecutedAt: i.lastExecutedAt ? new Date(i.lastExecutedAt).toISOString() : null }
-                : { symbol: i.symbol, operator: i.operator, threshold: i.threshold, firedAt: i.firedAt ? new Date(i.firedAt).toISOString() : null }),
-            })),
+            intents: intents.map((i) => {
+              const base = { id: i.id, type: i.type, summary: summarize(i), status: i.status };
+              if (i.type === 'dca') {
+                return {
+                  ...base,
+                  schedule: i.schedule.raw,
+                  nextRunAt: new Date(i.nextRunAt).toISOString(),
+                  lastExecutedAt: i.lastExecutedAt ? new Date(i.lastExecutedAt).toISOString() : null,
+                };
+              }
+              if (i.type === 'send') {
+                return {
+                  ...base,
+                  recipient: i.recipient.value,
+                  recipientAddress: i.recipient.resolvedAddress,
+                  amount: i.amount,
+                  schedule: i.schedule.raw,
+                  nextRunAt: new Date(i.nextRunAt).toISOString(),
+                  lastExecutedAt: i.lastExecutedAt ? new Date(i.lastExecutedAt).toISOString() : null,
+                };
+              }
+              // alert
+              return {
+                ...base,
+                symbol: i.symbol,
+                operator: i.operator,
+                threshold: i.threshold,
+                firedAt: i.firedAt ? new Date(i.firedAt).toISOString() : null,
+              };
+            }),
           },
         };
       }

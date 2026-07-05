@@ -37,6 +37,84 @@ const MAX_CACHED = 20;
  */
 const HISTORY_FOR_LLM = 6;
 
+// ── Random loading messages that continuously rotate while the AI works ──
+// A single pool of messages; a timed interval cycles through them every ~3.5s
+// so the user sees fresh text right up until the real reply lands.
+
+const LOADING_MESSAGES = [
+  '🤔 Processing your request...',
+  '🔄 Working on it...',
+  '⚙️ Crunching data...',
+  '📡 Connecting...',
+  '💭 Thinking...',
+  '🔍 Looking things up...',
+  '⏳ Just a moment...',
+  '✨ Almost there...',
+  '🔮 Checking...',
+  '🧩 Putting it together...',
+  '🎯 Focusing...',
+  '📊 Gathering info...',
+  '🔬 Examining...',
+  '💡 Running the numbers...',
+  '🌀 Processing...',
+  '🎲 Computing...',
+  '⏰ One sec...',
+  '🔎 Searching...',
+  '💪 On it...',
+  '🚀 Getting that for you...',
+  '🤖 Asking your AI agent...',
+  '🧠 Consulting the AI...',
+  '💬 Talking to the model...',
+  '⚡ Running inference...',
+  '🔄 Processing with AI...',
+  '🔮 AI is thinking...',
+  '📡 Querying the AI...',
+  '💭 AI is analyzing...',
+  '🎯 Getting the AI response...',
+  '🧩 Assembling the answer...',
+  '✨ Checking with AI...',
+  '🔬 Deep analysis...',
+  '💡 Computing best response...',
+  '🔄 Consulting AI...',
+  '🤔 AI is working...',
+  '📊 AI crunching data...',
+  '⚡ AI processing...',
+  '💪 The AI is on it...',
+  '🚀 AI thinking...',
+  '🎲 Running through AI...',
+];
+
+/** How often the loading message rotates (milliseconds). */
+const LOADING_ROTATION_MS = 3_500;
+
+function pickRandomMessage(exclude?: string): string {
+  let msg: string;
+  do {
+    msg = LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]!;
+  } while (msg === exclude && LOADING_MESSAGES.length > 1);
+  return msg;
+}
+
+/**
+ * Start a timed rotation that edits `loadingMsg` with a new random message
+ * every `LOADING_ROTATION_MS`. Returns a function that stops the rotation.
+ */
+function startLoadingRotation(
+  ctx: Context,
+  loadingMsg: { message_id: number },
+): () => void {
+  let current = pickRandomMessage();
+  const chatId = ctx.chat!.id;
+  const timer = setInterval(() => {
+    const next = pickRandomMessage(current);
+    current = next;
+    ctx.api.editMessageText(chatId, loadingMsg.message_id, next).catch(() => {});
+  }, LOADING_ROTATION_MS);
+  return () => {
+    clearInterval(timer);
+  };
+}
+
 const histories = new Map<string, ChatMessage[]>();
 
 function getHistory(userId: string): ChatMessage[] {
@@ -231,10 +309,10 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
   }
 
   // ── Progressive loading state ──
-  // Send a status message and progressively edit it as steps complete.
-  // The message stays visible during the slowest part (LLM inference ~5-10s)
-  // and is deleted right before the real reply is sent.
-  const loadingMsg = await ctx.reply('📖 Loading your history...').catch(() => null);
+  // Send a rotating status message that continuously changes until the AI
+  // response is ready. Deleted right before the real reply is sent.
+  const loadingMsg = await ctx.reply(pickRandomMessage()).catch(() => null);
+  const stopRotation = loadingMsg ? startLoadingRotation(ctx, loadingMsg) : () => {};
   await ctx.replyWithChatAction('typing');
 
   let history: ChatMessage[] = [];
@@ -243,7 +321,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
   try {
     // ── Step 1: Load conversation history (from cache or 0G Storage) ──
     // This populates the memory.ts cache so subsequent search() is instant.
-    // (The loading message is already '📖 Loading your history...' from above)
+    // Rotation is already running; the user sees different text every ~3.5s.
     await ctx.replyWithChatAction('typing');
     history = await loadHistory(userId);
 
@@ -272,15 +350,8 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     // ── Step 3: Persist user message to 0G Storage (best-effort, non-blocking) ──
     recordMessage(userId, 'user', text).catch(() => {});
 
-    // Keep loading message visible during LLM inference (the slowest step ~5-10s)
-    // It will be deleted right before the reply is sent
-    if (loadingMsg) {
-      await ctx.api.editMessageText(
-        ctx.chat!.id,
-        loadingMsg.message_id,
-        '🤖 Asking your AI agent...',
-      ).catch(() => {});
-    }
+    // Loading message is already rotating — it keeps cycling until the AI
+    // responds. It will be deleted right before the reply is sent.
     await ctx.replyWithChatAction('typing');
 
     // Send only the most recent turns to the LLM to keep per-request token
@@ -301,7 +372,8 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
       `[ai] user=${userId} iters=${iterations} status=${status} reply_len=${reply.length} verified=${verified ?? 'null'} chatID=${chatID ?? 'none'}`,
     );
 
-    // Delete the loading message before sending the real reply
+    // Stop the rotation and delete the loading message before sending the reply
+    stopRotation();
     if (loadingMsg) {
       ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
     }
@@ -362,6 +434,8 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
           `[aiHandler] rate limited — retry ${attempt + 1}/${maxRetries} in ${Math.round(delay / 1000)}s`,
         );
 
+        // Stop rotation and show a static rate-limit message
+        stopRotation();
         if (loadingMsg) {
           await ctx.api.editMessageText(
             ctx.chat!.id,
@@ -384,6 +458,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
             memoryContext,
           );
 
+          stopRotation();
           if (loadingMsg) {
             ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
           }
@@ -424,6 +499,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
           const stillRateLimited = /429|too many requests|rate.?limit/i.test(retryMsg);
           if (!stillRateLimited) {
             // Non-rate-limit error during retry — surface it
+            stopRotation();
             if (loadingMsg) {
               ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
             }
@@ -439,6 +515,7 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
       }
 
       // All retries exhausted — show the user-friendly rate limit message
+      stopRotation();
       if (loadingMsg) {
         ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
       }
@@ -459,7 +536,8 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     }
 
     // Non-rate-limit error — show immediately
-    // Delete loading message if it exists
+    // Stop rotation and delete loading message
+    stopRotation();
     if (loadingMsg) {
       ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
     }

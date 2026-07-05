@@ -109,10 +109,12 @@ function fmtTs(ts: number): string {
 
 /**
  * Confirmation methods that finalize without a separate "user pressed Confirm"
- * event (NFT mint on first wallet creation, DCA tick, alert fire). For these,
- * the `confirmedAt` field is the same value as `createdAt` / `finalizedAt`, so
- * rendering a Confirmed At cell just duplicates the Created timestamp and
- * confuses auditors on /verify.
+ * event (NFT mint on first wallet creation, DCA tick, alert fire).
+ *
+ * For these receipts, the `confirmedAt` timestamp IS set (from the moment the
+ * on-chain action was observed), but there is no separate user confirmation
+ * step. The rendering shows the `confirmedAt` timestamp (same value as
+ * `createdAt`/`finalizedAt`) alongside a contextual auto-confirm note.
  *
  * This set is the single source of truth: any new auto-confirm method added
  * to `ConfirmationSchema.method` should be added here AND covered by a
@@ -210,6 +212,9 @@ export function renderReceipt(
   // Single source of truth for the "auto-confirmed" treatment — see
   // omitConfirmationTimestamp() above. New auto-confirm methods extend
   // AUTO_CONFIRM_METHODS, not this call site.
+  // The confirmedAt timestamp IS rendered for auto-confirmed receipts (it
+  // was set when the on-chain action was observed). The auto-confirm note is
+  // an additional contextual hint, not a replacement for the timestamp.
   const isAutoConfirmedReceipt = omitConfirmationTimestamp(r);
 
   // Optional intent link block (DCA execution / alert fire receipts).
@@ -275,12 +280,13 @@ export function renderReceipt(
       <h2>5 · Confirmation</h2>
       <div class="grid">
         ${isAutoConfirmedReceipt
-          ? '' // no Required cell — the note below already says "Auto-confirmed"
+          ? '' // no Required cell — auto-confirmed receipts finalize without a button tap
           : `<div><span class="muted">Required</span><br>${statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>`}
         <div><span class="muted">Method</span><br><strong>${r.confirmation.method}</strong></div>
+        <div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>
         ${isAutoConfirmedReceipt
-          ? `<div class="muted" style="grid-column:1/-1">${blockTimestamp ? `Auto-confirmed on-chain at ${blockTimestamp} (see Block Timestamp in Chain below).` : 'Auto-confirmed — see Chain below for the on-chain tx.'}</div>`
-          : `<div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>`}
+          ? `<div class="muted" style="grid-column:1/-1">${blockTimestamp ? `Auto-confirmed on-chain — block timestamp: ${blockTimestamp}` : 'Auto-confirmed.'}</div>`
+          : ''}
       </div>
     </div>
 

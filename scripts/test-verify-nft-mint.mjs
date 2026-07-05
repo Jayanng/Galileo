@@ -218,12 +218,16 @@ async function runNftMint() {
   await t('[nft_mint] "2 · Parsed Intent" card is fully omitted', () => {
     assert.equal(html.includes('Parsed Intent'), false, 'expected no "Parsed Intent" substring');
   });
-  await t('[nft_mint] auto-confirmation: no "Confirmed At" cell (would just duplicate Created)', () => {
-    // For auto-confirmations there's no separate "user pressed Confirm" event,
-    // so the Confirmed At cell would just duplicate the Created timestamp. The
-    // renderer now hides it and shows a one-line note pointing at the Chain
-    // card for the canonical timestamp.
-    assert.equal(html.includes('Confirmed At'), false, 'expected no "Confirmed At" label for auto-confirmations');
+  await t('[nft_mint] auto-confirmation: "Confirmed At" cell IS present with the timestamp (receipt has confirmedAt set)', () => {
+    // Auto-confirmed receipts DO have a confirmedAt timestamp (set when the
+    // on-chain action was observed). The renderer now shows both the
+    // timestamp and a contextual auto-confirm note.
+    assert.equal(html.includes('Confirmed At'), true, 'expected "Confirmed At" label for auto-confirmations');
+    assert.equal(
+      html.includes('2023-11-14 22:13:20 UTC'),
+      true,
+      'expected the confirmedAt timestamp to appear in the Confirmed At cell',
+    );
     assert.equal(
       html.includes('Auto-confirmed'),
       true,
@@ -260,15 +264,20 @@ async function runDcaExecuted() {
     assert.equal(html.includes('Intent Link'), true, 'expected the Intent Link section');
     assert.equal(html.includes(DCA_INTENT_ID), true, `expected intentId ${DCA_INTENT_ID} in output`);
   });
-  await t('[dca.executed] auto-confirmation: no "Confirmed At" cell (would just duplicate Created)', () => {
-    assert.equal(html.includes('Confirmed At'), false, 'expected no "Confirmed At" label for auto-confirmations');
+  await t('[dca.executed] auto-confirmation: "Confirmed At" cell IS present with the timestamp (receipt has confirmedAt set)', () => {
+    assert.equal(html.includes('Confirmed At'), true, 'expected "Confirmed At" label for auto-confirmations');
+    assert.equal(
+      html.includes('2023-11-14 22:14:20 UTC'),
+      true,
+      'expected the confirmedAt timestamp to appear in the Confirmed At cell',
+    );
     assert.equal(
       html.includes('Auto-confirmed'),
       true,
-      'expected the auto-confirmation note (without blockTimestamp it should still render the generic wording)',
+      'expected the auto-confirmation note (without blockTimestamp it should render the generic wording)',
     );
     assert.equal(
-      html.includes('see Chain below for the on-chain tx'),
+      html.includes('Auto-confirmed.'),
       true,
       'expected the generic auto-confirm note when no blockTimestamp is passed',
     );
@@ -365,7 +374,7 @@ async function runBlockTimestamp() {
   });
   await t('[blockTs] auto-confirm note now points at the on-chain timestamp', () => {
     assert.equal(
-      html.includes(`Auto-confirmed on-chain at ${BLOCK_TS}`),
+      html.includes(`Auto-confirmed on-chain — block timestamp: ${BLOCK_TS}`),
       true,
       'expected the auto-confirm note to reference the block timestamp when present',
     );
@@ -374,7 +383,7 @@ async function runBlockTimestamp() {
     const noTs = renderReceipt(nftParsed);
     assert.equal(noTs.includes('Block Timestamp'), false, 'expected no "Block Timestamp" cell when not passed');
     assert.equal(
-      noTs.includes('see Chain below for the on-chain tx'),
+      noTs.includes('Auto-confirmed.'),
       true,
       'expected the generic auto-confirm note when blockTimestamp is absent',
     );
@@ -385,7 +394,7 @@ async function runBlockTimestamp() {
     assert.equal(dcaHtml.includes('Block Timestamp'), true, 'expected Block Timestamp cell for dca');
     assert.equal(dcaHtml.includes(DCA_BLOCK_TS), true, `expected ${DCA_BLOCK_TS} in dca Chain card`);
     assert.equal(
-      dcaHtml.includes(`Auto-confirmed on-chain at ${DCA_BLOCK_TS}`),
+      dcaHtml.includes(`Auto-confirmed on-chain — block timestamp: ${DCA_BLOCK_TS}`),
       true,
       'expected the dca auto-confirm note to reference the block timestamp',
     );

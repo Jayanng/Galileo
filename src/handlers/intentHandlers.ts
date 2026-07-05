@@ -35,12 +35,12 @@ function statusBadge(status: string): string {
   }
 }
 
-function typeIcon(type: 'dca' | 'alert'): string {
-  return type === 'dca' ? '📈' : '🔔';
+function typeIcon(type: 'dca' | 'alert' | 'send'): string {
+  return type === 'dca' ? '📈' : type === 'send' ? '📤' : '🔔';
 }
 
 function renderIntentList(
-  intents: { id: string; type: 'dca' | 'alert'; status: string; summary: string }[],
+  intents: { id: string; type: 'dca' | 'alert' | 'send'; status: string; summary: string }[],
 ): { text: string; keyboard: InlineKeyboard } {
   const kb = new InlineKeyboard();
   if (intents.length === 0) {

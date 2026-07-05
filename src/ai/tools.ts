@@ -283,6 +283,36 @@ export const toolDefinitions: ChatTool[] = [
   {
     type: 'function',
     function: {
+      name: 'send_schedule_create',
+      description:
+        'Create a recurring send (recurring transfer of OG). Recipient can be a 0x address or @username. Schedules: daily, weekly, hourly, "every N minutes/hours/days". For one-time send use the send command or button.',
+      parameters: {
+        type: 'object',
+        properties: {
+          recipient: {
+            type: 'string',
+            description: 'Recipient: a 0x... EVM address or @username.',
+          },
+          amount: {
+            type: 'string',
+            description: 'Amount of OG to send each time (decimal string).',
+          },
+          schedule: {
+            type: 'string',
+            description: 'Frequency: "daily", "weekly", "hourly", "every N minutes/hours/days".',
+          },
+          walletId: {
+            type: 'string',
+            description: 'Optional wallet ID; defaults to active wallet.',
+          },
+        },
+        required: ['recipient', 'amount', 'schedule'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'dca_create',
       description:
         'Create a recurring DCA swap. Pairs: OG↔USDC/USDT/WOG. Schedules: daily, weekly, hourly. For one-time swap use swap.',

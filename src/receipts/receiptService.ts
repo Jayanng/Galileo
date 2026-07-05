@@ -574,6 +574,147 @@ export interface DcaCancellationInput {
   source: 'command' | 'nl' | 'button';
 }
 
+// ─── Send creation receipt (create-and-upload — no staging) ──────────────────
+//
+// Emitted when the user schedules a recurring send. Proves the intent was set up
+// with the specified recipient, amount, schedule, and wallet. No on-chain action
+// at creation time — the first execution triggers the send execution receipt.
+
+export interface SendCreationInput {
+  userId: string;
+  intentId: string;
+  recipientKind: 'address' | 'username';
+  recipientValue: string;
+  resolvedAddress: string;
+  amount: string;
+  walletId: string;
+  walletName?: string;
+  scheduleRaw: string;
+  scheduleIntervalMs: number;
+  rawInput?: string;
+  compute?: ComputeLeg | null;
+}
+
+export async function createSendCreationReceipt(input: SendCreationInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const checks: RiskCheck[] = [
+    { check: 'recipient_resolved', status: 'pass', ts: now },
+    { check: 'balance_ok', status: 'pass', ts: now },
+    { check: 'wallet_ok', status: 'pass', ts: now },
+  ];
+  const raw = input.rawInput && input.rawInput.trim()
+    ? input.rawInput.trim()
+    : `recurring send ${input.amount} OG to ${input.recipientValue} ${input.scheduleRaw}`;
+  const recipientValue =
+    input.recipientKind === 'username' ? `@${input.recipientValue}` : input.recipientValue;
+
+  const receipt: SendReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'send',
+    userId: input.userId,
+    status: 'staged',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: { raw, source: 'nl' },
+    parsedIntent: {
+      type: 'send',
+      amount: input.amount,
+      asset: 'OG',
+      recipient: {
+        kind: input.recipientKind,
+        value: recipientValue,
+        resolvedAddress: input.resolvedAddress,
+      },
+      fromWalletId: input.walletId,
+      fromWalletName: input.walletName ?? '',
+    },
+    riskChecks: checks,
+    compute: input.compute ?? null,
+    confirmation: {
+      required: true,
+      method: 'implicit_schedule',
+      confirmedAt: now,
+    },
+    chain: {},
+    storage: {},
+  };
+  return emitReceipt(receipt);
+}
+
+// ─── Send execution receipt (create-and-upload — no staging) ─────────────────
+//
+// Emitted after each scheduled send execution. Unlike one-time sends (which use
+// the stage→finalize pattern), recurring sends have no user Confirm step — the
+// worker executes the send automatically. The receipt is uploaded immediately
+// under `receipt:<receiptId>` and linked back to the creation receipt.
+
+export interface SendExecutionInput {
+  userId: string;
+  intentId: string;
+  creationReceiptId?: string;
+  recipientKind: 'address' | 'username';
+  recipientValue: string;
+  resolvedAddress: string;
+  amount: string;
+  walletId: string;
+  walletName?: string;
+  txHash: string;
+  blockNumber?: number;
+}
+
+export async function createSendExecutionReceipt(input: SendExecutionInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const checks: RiskCheck[] = [
+    { check: 'balance_ok', status: 'pass', ts: now },
+    { check: 'send_executed', status: 'pass', ts: now },
+  ];
+
+  const recipientValue =
+    input.recipientKind === 'username' ? `@${input.recipientValue}` : input.recipientValue;
+
+  const receipt: SendReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'send',
+    userId: input.userId,
+    status: 'executed',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: {
+      raw: `Recurring send execution (automatic): ${input.amount} OG → ${recipientValue}`,
+      source: 'automatic',
+    },
+    parsedIntent: {
+      type: 'send',
+      amount: input.amount,
+      asset: 'OG',
+      recipient: {
+        kind: input.recipientKind,
+        value: recipientValue,
+        resolvedAddress: input.resolvedAddress,
+      },
+      fromWalletId: input.walletId,
+      fromWalletName: input.walletName ?? '',
+    },
+    riskChecks: checks,
+    compute: null,
+    confirmation: {
+      required: false,
+      method: 'automatic_scheduled',
+      confirmedAt: now,
+    },
+    chain: {
+      txHash: input.txHash,
+      blockNumber: input.blockNumber,
+    },
+    storage: {},
+  };
+  return emitReceipt(receipt);
+}
+
 export async function createDcaCancellationReceipt(input: DcaCancellationInput): Promise<CreateResult> {
   const receiptId = randomUUID();
   const now = Date.now();
@@ -612,6 +753,64 @@ export async function createDcaCancellationReceipt(input: DcaCancellationInput):
     intentLink: {
       intentId: input.intentId,
       creationReceiptId: input.creationReceiptId,
+    },
+    chain: {},
+    storage: {},
+  };
+  return emitReceipt(receipt);
+}
+
+export interface SendCancellationInput {
+  userId: string;
+  intentId: string;
+  creationReceiptId?: string;
+  recipientKind: 'address' | 'username';
+  recipientValue: string;
+  resolvedAddress: string;
+  amount: string;
+  walletId: string;
+  source: 'command' | 'nl' | 'button';
+}
+
+export async function createSendCancellationReceipt(input: SendCancellationInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const checks: RiskCheck[] = [
+    { check: 'intent_found', status: 'pass', ts: now },
+    { check: 'user_confirmed', status: 'pass', ts: now },
+  ];
+  const recipientValue =
+    input.recipientKind === 'username' ? `@${input.recipientValue}` : input.recipientValue;
+  const receipt: SendReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'send',
+    userId: input.userId,
+    status: 'cancelled',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: {
+      raw: `Cancel recurring send: ${input.amount} OG → ${recipientValue}`,
+      source: input.source,
+    },
+    parsedIntent: {
+      type: 'send',
+      amount: input.amount,
+      asset: 'OG',
+      recipient: {
+        kind: input.recipientKind,
+        value: recipientValue,
+        resolvedAddress: input.resolvedAddress,
+      },
+      fromWalletId: input.walletId,
+      fromWalletName: '',
+    },
+    riskChecks: checks,
+    compute: null,
+    confirmation: {
+      required: true,
+      method: 'telegram_inline_button',
+      confirmedAt: now,
     },
     chain: {},
     storage: {},
@@ -696,6 +895,19 @@ export async function createCancellationReceipt(
       amount: intent.amount,
       scheduleRaw: intent.schedule.raw,
       scheduleIntervalMs: intent.schedule.intervalMs,
+      walletId: intent.walletId,
+      source,
+    });
+  }
+  if (intent.type === 'send') {
+    return createSendCancellationReceipt({
+      userId: intent.userId,
+      intentId: intent.id,
+      creationReceiptId: intent.creationReceiptId,
+      recipientKind: intent.recipient.kind,
+      recipientValue: intent.recipient.value,
+      resolvedAddress: intent.recipient.resolvedAddress,
+      amount: intent.amount,
       walletId: intent.walletId,
       source,
     });

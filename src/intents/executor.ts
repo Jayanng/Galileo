@@ -16,14 +16,15 @@ import {
   computeNextRun,
   type AlertIntent,
   type DcaIntent,
+  type SendIntent,
   type Intent,
 } from './types';
 import { getPriceUSD, getPriceByCoinGeckoId, SYMBOL_TO_COINGECKO_ID } from '../og/prices';
 import { executeSwap } from '../swap/swapService';
 import { pendingSwaps, type PendingSwap } from '../swap/pendingSwap';
-import { getWallet } from '../wallet/walletService';
+import { getWallet, getSigner } from '../wallet/walletService';
 import { recordTx } from '../ai/memory';
-import { createDcaExecutionReceipt, createAlertFireReceipt } from '../receipts';
+import { createDcaExecutionReceipt, createAlertFireReceipt, createSendExecutionReceipt } from '../receipts';
 
 const EXPLORER_TX = 'https://chainscan-galileo.0g.ai/tx/';
 const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
@@ -170,7 +171,95 @@ function priceFmt(n: number): string {
  */
 export async function executeIntent(intent: Intent, bot: TelegramBot): Promise<ExecuteResult> {
   if (intent.type === 'dca') return executeDca(intent, bot);
+  if (intent.type === 'send') return executeSend(intent, bot);
   return executeAlert(intent, bot);
+}
+
+async function executeSend(intent: SendIntent, bot: TelegramBot): Promise<ExecuteResult> {
+  const now = Date.now();
+  const wallet = await getWallet(intent.userId, intent.walletId);
+  if (!wallet) {
+    await bot.api.sendMessage(
+      intent.userId,
+      `⚠️ Recurring send paused: wallet "${intent.walletId}" no longer exists. Use /intents to cancel.`,
+    );
+    return { intent: { ...intent, status: 'paused' } };
+  }
+
+  const signer = await getSigner(intent.userId, intent.walletId);
+  if (!signer) {
+    await bot.api.sendMessage(
+      intent.userId,
+      `⚠️ Recurring send paused: could not load wallet "${intent.walletId}". Use /intents to review.`,
+    );
+    return { intent: { ...intent, status: 'paused' } };
+  }
+
+  try {
+    const amountWei = parseEther(intent.amount);
+    const tx = await signer.sendTransaction({
+      to: intent.recipient.resolvedAddress,
+      value: amountWei,
+    });
+    const txReceipt = await tx.wait();
+
+    recordTx(intent.userId, {
+      type: 'send',
+      amount: `${intent.amount} OG→${intent.recipient.value}`,
+      to: intent.recipient.resolvedAddress,
+      hash: tx.hash,
+    }).catch(() => {});
+
+    // Emit execution receipt (create-and-upload pattern, like DCA execution).
+    let execReceiptRootHash: string | null = null;
+    try {
+      const execReceipt = await createSendExecutionReceipt({
+        userId: intent.userId,
+        intentId: intent.id,
+        creationReceiptId: intent.creationReceiptId,
+        recipientKind: intent.recipient.kind,
+        recipientValue: intent.recipient.value,
+        resolvedAddress: intent.recipient.resolvedAddress,
+        amount: intent.amount,
+        walletId: intent.walletId,
+        walletName: wallet.name,
+        txHash: tx.hash,
+        blockNumber: txReceipt?.blockNumber,
+      });
+      execReceiptRootHash = execReceipt.rootHash;
+    } catch (e) {
+      console.warn(`[intents] send execution receipt failed:`, (e as Error).message);
+    }
+
+    const txLine = `\nTx: [${tx.hash.slice(0, 12)}…](${EXPLORER_TX}${tx.hash})`;
+    const receiptLine = execReceiptRootHash
+      ? `\n🧾 Receipt: [0x${execReceiptRootHash.slice(2, 12)}…](${PROOF_VERIFY_URL}${execReceiptRootHash})`
+      : '';
+    await bot.api.sendMessage(
+      intent.userId,
+      `✅ Recurring send executed (${intent.schedule.raw}): ${intent.amount} OG → ${intent.recipient.value}${txLine}${receiptLine}\nNext in ${intent.schedule.raw}.`,
+      { parse_mode: 'Markdown' },
+    );
+    return {
+      intent: {
+        ...intent,
+        nextRunAt: computeNextRun(intent.schedule, now),
+        lastExecutedAt: now,
+      },
+    };
+  } catch (e) {
+    await bot.api.sendMessage(
+      intent.userId,
+      `⚠️ Recurring send failed (${intent.schedule.raw}): ${(e as Error).message}\nNext attempt in ${intent.schedule.raw}.`,
+    );
+    return {
+      intent: {
+        ...intent,
+        nextRunAt: computeNextRun(intent.schedule, now),
+        lastExecutedAt: intent.lastExecutedAt,
+      },
+    };
+  }
 }
 
 async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteResult> {

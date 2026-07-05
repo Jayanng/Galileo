@@ -70,18 +70,40 @@ export const AlertIntentSchema = z.object({
 });
 export type AlertIntent = z.infer<typeof AlertIntentSchema>;
 
-export const IntentSchema = z.discriminatedUnion('type', [DcaIntentSchema, AlertIntentSchema]);
+// ── Send intent (recurring send/transfer) ───────────────────────────────────
+
+export const SendIntentSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  type: z.literal('send'),
+  status: IntentStatusSchema,
+  recipient: z.object({
+    kind: z.enum(['address', 'username']),
+    value: z.string(),  // user-facing: @username or 0x address
+    resolvedAddress: z.string(),  // always the 0x address at creation time
+  }),
+  amount: z.string(), // human-readable decimal string of OG to send
+  walletId: z.string(),
+  schedule: ScheduleSchema,
+  nextRunAt: z.number().int(),
+  lastExecutedAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+  creationReceiptId: z.string().optional(),
+});
+export type SendIntent = z.infer<typeof SendIntentSchema>;
+
+export const IntentSchema = z.discriminatedUnion('type', [DcaIntentSchema, AlertIntentSchema, SendIntentSchema]);
 export type Intent = z.infer<typeof IntentSchema>;
 
 /** True if the worker should execute this intent at `now`. */
 export function isDue(intent: Intent, now: number): boolean {
   if (intent.status !== 'active') return false;
-  if (intent.type === 'dca') return intent.nextRunAt <= now;
+  if (intent.type === 'dca' || intent.type === 'send') return intent.nextRunAt <= now;
   // alerts have no schedule; the worker always re-checks their price
   return true;
 }
 
-/** Compute the next run timestamp for a DCA schedule, given a reference `fromTs`. */
+/** Compute the next run timestamp for a schedule, given a reference `fromTs`. */
 export function computeNextRun(schedule: Schedule, fromTs: number): number {
   return fromTs + schedule.intervalMs;
 }
@@ -90,6 +112,10 @@ export function computeNextRun(schedule: Schedule, fromTs: number): number {
 export function summarize(intent: Intent): string {
   if (intent.type === 'dca') {
     return `DCA: ${intent.amount} ${intent.fromToken} → ${intent.toToken} (${intent.schedule.raw})`;
+  }
+  if (intent.type === 'send') {
+    const recipient = intent.recipient.value;
+    return `Recurring send: ${intent.amount} OG → ${recipient} (${intent.schedule.raw})`;
   }
   const op =
     intent.operator === '<'

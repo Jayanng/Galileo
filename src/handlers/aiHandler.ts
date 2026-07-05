@@ -35,7 +35,7 @@ const MAX_CACHED = 20;
  * `search_history` tool for anything older, so trimming the raw transcript
  * here trades little quality for a large reduction in tokens/min.
  */
-const HISTORY_FOR_LLM = 6;
+const HISTORY_FOR_LLM = 4;
 
 // ── Random loading messages that continuously rotate while the AI works ──
 // A single pool of messages; a timed interval cycles through them every ~3.5s

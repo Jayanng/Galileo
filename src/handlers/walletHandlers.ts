@@ -82,7 +82,7 @@ async function renderHome(userId: string): Promise<{ text: string; keyboard: Inl
   kb.text('📥 Deposit', 'home:deposit').text('📤 Send', 'home:send').row();
   kb.text('🔄 Swap', 'home:swap').text('⚙️ Settings', 'home:settings').row();
   kb.text('➕ New wallet', 'home:new').text('⬇️ Import wallet', 'home:import').row();
-  kb.text('❓ Help', 'home:help');
+  kb.text('❓ Help', 'home:help').url('🔍 Proof Center', 'https://galileo-test.fly.dev/proofs');
 
   return { text, keyboard: kb };
 }

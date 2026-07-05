@@ -178,14 +178,14 @@
   <rect x="650" y="368" width="240" height="10" fill="#818cf8"/>
   <text x="770" y="368" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">AI Agent Loop (TEE-attested)</text>
   <text x="770" y="392" text-anchor="middle" font-size="11" fill="#4b5563">src/ai/agent.ts</text>
-  <text x="770" y="410" text-anchor="middle" font-size="10" fill="#6b7280">runAgent() max 5 iterations</text>
+  <text x="770" y="410" text-anchor="middle" font-size="10" fill="#6b7280">runAgent() max 3 iterations</text>
   <text x="770" y="423" text-anchor="middle" font-size="10" fill="#6b7280">tools.ts + toolExecutor.ts</text>
   <line x1="770" y1="430" x2="770" y2="470" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
   <text x="780" y="454" font-size="10" fill="#6b7280">tool dispatch</text>
 
   <!-- Tool Executor -->
   <rect x="40" y="475" width="1120" height="56" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1" filter="url(#shadow)"/>
-  <text x="600" y="495" text-anchor="middle" font-size="13" font-weight="600" fill="#374151">Tool Executor  src/ai/toolExecutor.ts  ·  26 LLM-callable tools — value-moving tools only STAGE an action + receipt (never execute without Confirm)</text>
+  <text x="600" y="495" text-anchor="middle" font-size="13" font-weight="600" fill="#374151">Tool Executor  src/ai/toolExecutor.ts  ·  23 LLM-callable tools — value-moving tools only STAGE an action + receipt (never execute without Confirm)</text>
   <text x="600" y="512" text-anchor="middle" font-size="10" fill="#6b7280">Sends and imports are NOT AI tools — deterministic command + Confirm-button flows so private keys never reach the LLM</text>
   <line x1="600" y1="531" x2="600" y2="560" stroke="#5a5a6e" stroke-width="2" marker-end="url(#arrow)"/>
 

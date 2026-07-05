@@ -223,6 +223,7 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
   createDcaExecutionReceipt({
     userId: intent.userId,
     intentId: intent.id,
+    creationReceiptId: intent.creationReceiptId,
     fromToken: intent.fromToken,
     toToken: intent.toToken,
     amount: intent.amount,
@@ -263,6 +264,7 @@ async function executeAlert(alert: AlertIntent, bot: TelegramBot): Promise<Execu
     createAlertFireReceipt({
       userId: alert.userId,
       intentId: alert.id,
+      creationReceiptId: alert.creationReceiptId,
       symbol: alert.symbol,
       coingeckoId: alert.coingeckoId,
       operator: alert.operator,

@@ -143,7 +143,7 @@ export interface ImportErr {
  * - Refuses to add a wallet whose address already exists in the user's set
  *   (no silent overwrites; tell the user which wallet it conflicts with).
  * - Imported wallets do NOT have a seed phrase — `encMnemonic` is intentionally
- *   omitted so the AI tool `reveal_recovery_phrase` reports "not stored" later.
+ *   omitted so the `/privatekey` flow reports "no recovery phrase stored" later.
  *   (Imported keys never carry a mnemonic in the first place.)
  * - No gas drip: the user is bringing their own wallet, assumed already funded.
  */

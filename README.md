@@ -1,3 +1,13 @@
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![0G Chain](https://img.shields.io/badge/0G-Galileo%20Testnet-00D4AA)](https://0g.ai)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![CI](https://github.com/Jayanng/Galileo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jayanng/Galileo/actions)
+[![0G Integration](https://img.shields.io/badge/0G_Integration-Reference-00D4AA)](0G-INTEGRATION.md)
+[![Live on Telegram](https://img.shields.io/badge/Live%20on-Telegram-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
+[![Multi--Language](https://img.shields.io/badge/Languages-10%2B-00D4AA)]()
+[![Deployed on Fly.io](https://img.shields.io/badge/Deployed-Fly.io-FF6B6B?logo=fly)](https://fly.io)
+
 # 🛡️ Galileo – The Verifiable AI Wallet on 0G
 
 <div align="center">
@@ -36,16 +46,6 @@ Then verify the action yourself, in any browser, by root hash:
 
 ---
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript)](https://www.typescriptlang.org/)
-[![0G Chain](https://img.shields.io/badge/0G-Galileo%20Testnet-00D4AA)](https://0g.ai)
-[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![CI](https://github.com/Jayanng/Galileo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jayanng/Galileo/actions)
-[![0G Integration](https://img.shields.io/badge/0G_Integration-Reference-00D4AA)](0G-INTEGRATION.md)
-[![Live on Telegram](https://img.shields.io/badge/Live%20on-Telegram-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
-[![Multi--Language](https://img.shields.io/badge/Languages-10%2B-00D4AA)]()
-[![Deployed on Fly.io](https://img.shields.io/badge/Deployed-Fly.io-FF6B6B?logo=fly)](https://fly.io)
-
 [Features](#what-galileo-does) · [Why Galileo](#why-galileo-exists) · [Quick Start](#quick-start) · [Architecture](#how-its-built) · [0G Integration Reference](0G-INTEGRATION.md) · [Usage Reference](docs/USAGE.md) · [Testing Reference](docs/TESTING.md) · [Deploy Guide](DEPLOY.md) · [Project Structure](#project-structure) · [Roadmap](#roadmap)
 
 <img src="docs/architecture.svg" alt="Galileo Architecture" width="100%"/>
@@ -73,14 +73,16 @@ That is a different product. The defining question is not *"does it understand n
 
 So 0G is not a feature of Galileo. **0G is the precondition for any sensitive action to execute.**
 
-### The winning perception
+### 0G is load-bearing on every feature
 
-| Current perception | Winning perception |
-|---|---|
-| A friendly Telegram wallet with AI and 0G integrations. | A verifiable intent layer for AI agents that move value. |
-| 0G helps with memory and AI responses. | 0G is required before sensitive wallet actions can execute. |
-| The demo happens inside Telegram. | A judge can verify public receipts from a browser by root hash. |
-| Lots of wallet features. | One dominant primitive: safe, auditable AI-controlled finance. |
+| Feature | Without 0G | With 0G |
+|---|---|---|
+| **AI send** | Users trust mutable bot logs. | TEE-verified intent and public receipt. |
+| **Swap** | Opaque AI suggestion and tx. | Verified route, user confirmation, archived receipt, tx link. |
+| **DCA** | Trust a centralized scheduler. | Verifiable autonomous execution receipts. |
+| **Memory** | Mutable database history. | Permanent audit history on 0G Storage with redaction/encryption. |
+| **Recovery** | Server-dependent records. | Rebuild audit trail from Storage roots. |
+| **Audit** | Screenshots or private logs. | Public root-hash verification. |
 
 ### Why Galileo can credibly claim this
 
@@ -198,9 +200,25 @@ Set-and-forget money habits, just by talking:
 "alert me if OG drops below $1"      → Telegram ping when price hits
 ```
 
-- **DCA** — *"dca X <from> into <to> every <schedule>"*. Bot's worker ticks every 30s.
+- **DCA** — *"dca X <from> into <to> every <schedule>"*. Bot's worker ticks every 30s. Each scheduled swap fires automatically and emits a Verified Intent Receipt that links back to the original creation receipt — proving the rule was set up correctly *and* executed exactly as intended. (See [Verifiable DCA on 0G](#verifiable-dca-on-0g) below.)
 - **Alerts** — *"alert me if <symbol> goes <operator> <price>"*. Fires once when met.
 - **Manage** — `/intents`, `/cancel`, `/pause` with inline buttons.
+
+### 🔄 Verifiable DCA on 0G
+
+DCA turns Galileo from a chat wallet into an **autonomous, auditable finance agent**.
+Each DCA rule lives on 0G Storage as an intent root, and every scheduled execution
+links back to it via `creationReceiptId` — so a judge can verify the full chain from
+*"user said 'swap 1 OG into USDC weekly'"* → *"rule was archived"* → *"each tick
+executed on 0G Chain"* → *"each execution receipt links to the same parent root"*:
+
+```
+1. User says "dca 1 OG into USDC weekly" → TEE-attested parse → user confirms rule
+2. Rule archived to 0G Storage as a creation receipt (its own root hash)
+3. Worker ticks → validates balance, allowance, gas → executes swap on 0G Chain
+4. Each execution emits a new receipt archived to 0G Storage
+5. Proof Center links each child execution root back to the parent intent root
+```
 
 ### 💱 Swap, Send, Wrap
 
@@ -225,6 +243,28 @@ Every interaction is permanently stored on 0G Storage. The bot remembers:
 
 Memory survives bot restarts. Ask *"what did I do yesterday?"* and get the right answer —
 verifiable from the same 0G Storage root hash that backs every receipt.
+
+### ♻️ Recovery — Rebuild From Storage Roots
+
+If Galileo's server restarts, migrates, or loses local state, the full audit trail
+rebuilds from 0G Storage root hashes — no server-dependent records, no trusted
+snapshots:
+
+- **Receipts** — recover any Verified Intent Receipt by root hash via
+  [`/verify/:root`](https://galileo-test.fly.dev/verify/), even if the local index
+  is wiped. Each receipt lives on 0G Storage under its own immutable root.
+- **Conversation history** — the agent's memory layer rehydrates from 0G Storage on
+  first message after a restart (`loadHistory` cold path). No user ever sees
+  *"no record"* if the proof exists on Storage.
+- **Scheduled intents** — DCA rules and alerts rehydrate from 0G Storage
+  (`OgFileIntentStore.hydrate`), so a restart never silently drops a recurring
+  swap or armed alert.
+- **Wallets** — keys are AES-256-GCM encrypted at rest locally; the public
+  address + metadata history rebuilds from 0G Storage. Keys never live on
+  public immutable storage.
+
+This is what "recovery from Storage roots" means in practice: zero trust in the
+operator's server, full trust in the root hash.
 
 ### 🔐 TEE-Verified Replies
 
@@ -300,13 +340,11 @@ for the layered architecture diagram and design rationale.
 
 ### 🤖 AI Tools (the depth under the hood)
 
-The agent exposes **26 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
+The agent exposes **23 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 `src/ai/toolExecutor.ts`. Grouped by area:
 
 - **Wallet CRUD** — `create_wallet`, `list_wallets`, `get_balance`, `get_wallet_address`,
   `get_wallet_details`, `get_wallet_timeline`, `get_total_og`, `rename_wallet`, `delete_wallet`
-- **Secrets** — `reveal_private_key`, `reveal_recovery_phrase` (BIP-39 seed; only for
-  wallets created in-app, not imported)
 - **Portfolio + pricing** — `get_portfolio`, `get_price`, `transaction_stats`
 - **Memory + proofs** — `search_history`, `get_proofs`
 - **Scheduled intents** — `dca_create`, `alert_create`, `list_intents`, `manage_intent`
@@ -315,10 +353,11 @@ The agent exposes **26 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 - **On-chain explainers (read-only)** — `explain_contract`, `explain_transaction`
 - **Profile NFT** — `get_profile_nft` (view your soulbound badge), `get_leaderboard` (community size)
 
-> **Why sends and imports are not AI tools:** sending funds and importing wallets run through
-> deterministic command + Confirm-button flows (`/send`, `/import`) so private keys never
-> enter conversation history or 0G Storage memory snapshots. This is a deliberate safety
-> property — keys never reach the LLM, so the TEE-attested agent cannot exfiltrate them.
+> **Why sends, imports, and key reveal are not AI tools:** sending funds, importing wallets,
+> and revealing private keys run through deterministic command + Confirm-button flows
+> (`/send`, `/import`, `/privatekey`) so private keys never enter conversation history or
+> 0G Storage memory snapshots. This is a deliberate safety property — keys never reach the
+> LLM, so the TEE-attested agent cannot exfiltrate them.
 
 ---
 
@@ -417,7 +456,7 @@ proof is public.
 │  │  1. Build system prompt + memory context             │ │
 │  │  2. Call 0G Compute (LLM) with tool definitions      │ │
 │  │  3. Execute tool calls via toolExecutor               │ │
-│  │  4. Loop until LLM produces final answer (max 5)     │ │
+│  │  4. Loop until LLM produces final answer (max 3)     │ │
 │  │  5. Persist interaction to 0G Storage                │ │
 │  └──────────────────────────────────────────────────────┘ │
 │                           │                                │
@@ -541,8 +580,8 @@ src/
 │   └── nftService.ts          # Profile NFT mint, query, metadata update (backs get_profile_nft)
 │
 ├── ai/
-│   ├── agent.ts              # Tool-calling agent loop (max 5 iterations)
-│   ├── tools.ts              # Tool definitions (26 tools)
+│   ├── agent.ts              # Tool-calling agent loop (max 3 iterations)
+│   ├── tools.ts              # Tool definitions (23 tools)
 │   ├── toolExecutor.ts       # Dispatches LLM tool calls to services
 │   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
 │   ├── memory.ts             # F1: permanent memory (0G Storage snapshots)
@@ -634,7 +673,7 @@ scripts/
 | **Wallet Import** Bring an existing wallet via private key (`/import`, Confirm-gated) | ✅ Complete |
 | **On-Chain Explainers** `explain_contract` + `explain_transaction` read-only lookups | ✅ Complete |
 | **Username Registry Persistence** | ✅ Complete (in-memory + optional 0G Storage layer, gated by `OG_STORAGE_ENABLED`) |
-| **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 6 AI tools; ticks every 30s, survives restarts via 0G Storage) |
+| **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 4 AI tools; ticks every 30s, survives restarts via 0G Storage) |
 | **Profile NFT** Soulbound ERC-721 per user (`GALPRO`), auto-mint on first wallet | ✅ Complete |
 | **Proof Center** Web-verifiable audit dashboard at `/proofs`, `/status`, `/intents/live`, `/verify/:root` | ✅ Complete |
 | **F6** Smart Link / Action Generator | ⏳ Planned (must emit a verifiable receipt) |

@@ -48,6 +48,7 @@ export const DcaIntentSchema = z.object({
   nextRunAt: z.number().int(), // unix-ms; when worker should next fire
   lastExecutedAt: z.number().int().nullable(), // null until first fire
   createdAt: z.number().int(),
+  creationReceiptId: z.string().optional(),
 });
 export type DcaIntent = z.infer<typeof DcaIntentSchema>;
 
@@ -65,6 +66,7 @@ export const AlertIntentSchema = z.object({
   lastCheckedAt: z.number().int().nullable(),
   firedAt: z.number().int().nullable(), // null until condition met
   createdAt: z.number().int(),
+  creationReceiptId: z.string().optional(),
 });
 export type AlertIntent = z.infer<typeof AlertIntentSchema>;
 

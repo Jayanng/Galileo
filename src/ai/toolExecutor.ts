@@ -5,7 +5,6 @@ import {
   getWalletBalance,
   getAllBalances,
   renameWallet,
-  getWalletSecrets,
   deleteWallet,
   getOnChainTxCount,
 } from '../wallet/walletService';
@@ -28,7 +27,7 @@ import {
 import { getActiveId } from '../wallet/activeWallet';
 import { explainContract } from '../og/contractExplorer';
 import { explainTransaction } from '../og/transactionExplorer';
-import { createDcaCreationReceipt, createAlertCreationReceipt } from '../receipts';
+import { createDcaCreationReceipt, createAlertCreationReceipt, type ComputeLeg } from '../receipts';
 
 /**
  * Tool execution result. Always JSON-serializable (no BigInts).
@@ -41,20 +40,50 @@ export type ToolResult =
   | { success: false; error: string };
 
 /**
+ * TEE verification metadata from the 0G Compute call that triggered this tool.
+ * Passed from the agent loop so receipt-creating tools can record the compute leg.
+ * Undefined when the tool is called from a deterministic (non-AI) path.
+ */
+export interface ComputeContext {
+  verified: boolean | null;
+  chatID: string | null;
+  providerAddress: string | null;
+}
+
+/**
+ * Build a ComputeLeg for a receipt from the agent's verification context.
+ * Returns null when verification was not attempted (fallback mode, no chatID,
+ * or the tool was called from a deterministic path without compute metadata).
+ */
+function buildComputeLeg(ctx?: ComputeContext): ComputeLeg | null {
+  if (!ctx) return null;
+  if (ctx.verified === null) return null;
+  if (!ctx.chatID || !ctx.providerAddress) return null;
+  return {
+    provider: ctx.providerAddress,
+    verified: ctx.verified,
+    chatId: ctx.chatID,
+  };
+}
+
+/**
  * Dispatch an LLM tool call to the matching walletService function.
  *
- * @param userId   Telegram user ID (string)
- * @param toolName One of: create_wallet, list_wallets, get_balance,
- *                 get_wallet_address, rename_wallet, search_history,
- *                 get_proofs, get_portfolio, get_price
- * @param args     Parsed JSON arguments from the LLM
- * @returns        JSON-serializable result (safe to feed back to the LLM
- *                 as a tool response message)
+ * @param userId         Telegram user ID (string)
+ * @param toolName       One of: create_wallet, list_wallets, get_balance,
+ *                       get_wallet_address, rename_wallet, search_history,
+ *                       get_proofs, get_portfolio, get_price
+ * @param args           Parsed JSON arguments from the LLM
+ * @param computeContext TEE verification metadata from the agent loop (optional;
+ *                       absent when called from deterministic UI handlers)
+ * @returns              JSON-serializable result (safe to feed back to the LLM
+ *                       as a tool response message)
  */
 export async function executeTool(
   userId: string,
   toolName: string,
   args: Record<string, any>,
+  computeContext?: ComputeContext,
 ): Promise<ToolResult> {
   try {
     switch (toolName) {
@@ -338,49 +367,6 @@ export async function executeTool(
         };
       }
 
-      case 'reveal_private_key': {
-        if (!args.walletId) {
-          return { success: false, error: 'walletId is required' };
-        }
-        const sec = await getWalletSecrets(userId, String(args.walletId));
-        if (!sec) {
-          return { success: false, error: 'wallet not found' };
-        }
-        console.log(`[toolExecutor] reveal_private_key for wallet=${sec.name} (${sec.address})`);
-        return {
-          success: true,
-          data: {
-            name: sec.name,
-            address: sec.address,
-            privateKey: sec.privateKey,
-            securityWarning: 'Keep this private key secret! Anyone with it has full control of the wallet. Never share it online.',
-          },
-        };
-      }
-
-      case 'reveal_recovery_phrase': {
-        if (!args.walletId) {
-          return { success: false, error: 'walletId is required' };
-        }
-        const sec = await getWalletSecrets(userId, String(args.walletId));
-        if (!sec) {
-          return { success: false, error: 'wallet not found' };
-        }
-        if (!sec.mnemonic) {
-          return { success: false, error: 'No recovery phrase stored for this wallet. It may have been created before seed phrase backup was added.' };
-        }
-        console.log(`[toolExecutor] reveal_recovery_phrase for wallet=${sec.name} (${sec.address})`);
-        return {
-          success: true,
-          data: {
-            name: sec.name,
-            address: sec.address,
-            mnemonic: sec.mnemonic,
-            securityWarning: 'Keep this recovery phrase secret and store it OFFLINE! Anyone with it can regenerate your wallet and access all funds. Never type it into any website.',
-          },
-        };
-      }
-
       case 'delete_wallet': {
         if (!args.walletId) {
           return { success: false, error: 'walletId is required' };
@@ -520,15 +506,21 @@ export async function executeTool(
         console.log(`[toolExecutor] dca_create id=${intent.id} ${amount} ${fromToken}\u2192${toToken} ${schedule.raw}`);
         // F5: emit a DCA creation receipt (proves the schedule was set up).
         const walletName = wallets.find((w) => w.id === resolvedWalletId)?.name;
-        createDcaCreationReceipt({
-          userId,
-          intentId: intent.id,
-          fromToken, toToken, amount,
-          scheduleRaw: schedule.raw,
-          scheduleIntervalMs: schedule.intervalMs,
-          walletId: resolvedWalletId!,
-          walletName,
-        }).catch((e) => console.warn(`[toolExecutor] dca creation receipt failed:`, (e as Error).message));
+        try {
+          const creation = await createDcaCreationReceipt({
+            userId,
+            intentId: intent.id,
+            fromToken, toToken, amount,
+            scheduleRaw: schedule.raw,
+            scheduleIntervalMs: schedule.intervalMs,
+            walletId: resolvedWalletId!,
+            walletName,
+            compute: buildComputeLeg(computeContext),
+          });
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+        } catch (e) {
+          console.warn(`[toolExecutor] dca creation receipt failed:`, (e as Error).message);
+        }
         return {
           success: true,
           data: {
@@ -599,14 +591,20 @@ export async function executeTool(
         await intentStore.add(intent);
         console.log(`[toolExecutor] alert_create id=${intent.id} ${upper} ${operator} $${threshold}`);
         // F5: emit an alert creation receipt (proves the alert was armed).
-        createAlertCreationReceipt({
-          userId,
-          intentId: intent.id,
-          symbol: upper,
-          coingeckoId,
-          operator,
-          threshold,
-        }).catch((e) => console.warn(`[toolExecutor] alert creation receipt failed:`, (e as Error).message));
+        try {
+          const creation = await createAlertCreationReceipt({
+            userId,
+            intentId: intent.id,
+            symbol: upper,
+            coingeckoId,
+            operator,
+            threshold,
+            compute: buildComputeLeg(computeContext),
+          });
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+        } catch (e) {
+          console.warn(`[toolExecutor] alert creation receipt failed:`, (e as Error).message);
+        }
         return {
           success: true,
           data: {

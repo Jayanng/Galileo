@@ -246,42 +246,6 @@ export const toolDefinitions: ChatTool[] = [
   {
     type: 'function',
     function: {
-      name: 'reveal_private_key',
-      description:
-        '⚠️ Reveal private key. Only when user explicitly asks. For seed phrase use reveal_recovery_phrase.',
-      parameters: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'The wallet ID (8-char hex). Call list_wallets first.',
-          },
-        },
-        required: ['walletId'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'reveal_recovery_phrase',
-      description:
-        '⚠️ Reveal BIP-39 seed phrase. Only when user explicitly asks. For private key use reveal_private_key.',
-      parameters: {
-        type: 'object',
-        properties: {
-          walletId: {
-            type: 'string',
-            description: 'The wallet ID (8-char hex). Call list_wallets first.',
-          },
-        },
-        required: ['walletId'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'delete_wallet',
       description:
         '⚠️ Permanently delete a wallet — IRREVERSIBLE. Warn user to back up key first.',

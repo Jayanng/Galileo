@@ -108,7 +108,11 @@ export async function runAgent(
         }
 
         console.log(`[agent] tool call: ${toolName}(${JSON.stringify(parsedArgs)})`);
-        const result = await executeTool(userId, toolName, parsedArgs);
+        const result = await executeTool(userId, toolName, parsedArgs, {
+          verified: agentResult.verified,
+          chatID: agentResult.chatID,
+          providerAddress: agentResult.providerAddress,
+        });
 
         // F1: persist tool call to 0G Storage (best-effort, never throws)
         await recordToolCall(userId, toolName, parsedArgs, result);

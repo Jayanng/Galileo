@@ -35,6 +35,7 @@ import { uploadJson, downloadJson, downloadByRootHash } from '../og/fileStorage'
 import * as store from './receiptStore';
 import {
   RECEIPT_VERSION,
+  type ComputeLeg,
   type DcaReceipt,
   type IntentReceipt,
   type KeyRevealReceipt,
@@ -302,6 +303,7 @@ export interface DcaCreationInput {
   walletId: string;
   walletName?: string;
   rawInput?: string;
+  compute?: ComputeLeg | null;
 }
 
 export async function createDcaCreationReceipt(input: DcaCreationInput): Promise<CreateResult> {
@@ -337,7 +339,7 @@ export async function createDcaCreationReceipt(input: DcaCreationInput): Promise
       walletName: input.walletName,
     },
     riskChecks: checks,
-    compute: null,
+    compute: input.compute ?? null,
     confirmation: {
       required: true,
       method: 'implicit_schedule',
@@ -422,6 +424,7 @@ export interface AlertCreationInput {
   operator: '<' | '>' | '<=' | '>=';
   threshold: number;
   rawInput?: string;
+  compute?: ComputeLeg | null;
 }
 
 export async function createAlertCreationReceipt(input: AlertCreationInput): Promise<CreateResult> {
@@ -457,7 +460,7 @@ export async function createAlertCreationReceipt(input: AlertCreationInput): Pro
       threshold: input.threshold,
     },
     riskChecks: checks,
-    compute: null,
+    compute: input.compute ?? null,
     confirmation: {
       required: true,
       method: 'implicit_schedule',

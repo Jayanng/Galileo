@@ -376,6 +376,21 @@ independently recoverable via `/verify/:rootHash` — immune to the rolling memo
 `MAX_ENTRIES` compaction. Key-reveal receipts are deliberately local-only (sensitive metadata
 about key reveals should not live on public immutable storage).
 
+**Parent→child receipt chain (DCA + alerts):** DCA creation and alert arming receipts store
+their `receiptId` on the intent itself (`creationReceiptId`). When the worker executes a DCA
+tick or an alert fires, the execution/fire receipt links back to the creation receipt via
+`intentLink.creationReceiptId` — so a judge can verify the full chain from *"user said 'dca 1
+OG into USDC weekly'"* → *"rule was archived"* → *"each tick executed on 0G Chain"* → *"each
+execution receipt links to the same parent root"*. The Proof Center renders this link at
+`/verify/:root` under "Creation Receipt".
+
+**Compute leg on receipts:** DCA creation and alert arming receipts carry a `compute` field
+(`{ provider, verified, chatId }`) when the intent was created via the AI agent path. This is
+populated from the TEE verification metadata of the LLM call that triggered the tool — no
+additional 0G Compute request is made. When the intent is created via the deterministic parser
+path (`intentUiHandlers.ts`), `compute` is `null` (no LLM was involved). Send/swap receipts
+also carry `compute: null` today — they are deterministic command flows, not AI tools.
+
 - **Schema**: `src/receipts/types.ts` (Zod-validated discriminated union on `actionType`)
 - **Service**: `src/receipts/receiptService.ts` (stage / finalize / emit / cancel / fail)
 - **Index**: `src/receipts/receiptStore.ts` → `OG_RECEIPT_INDEX_PATH` (receiptId → rootHash)

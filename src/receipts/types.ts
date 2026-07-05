@@ -93,6 +93,19 @@ export const NotificationSchema = z.object({
 });
 export type Notification = z.infer<typeof NotificationSchema>;
 
+/**
+ * On-chain settlement reference. `blockNumber` is populated when the F5
+ * pipeline observes a tx confirm (send/swap/dca execution/nft mint) so the
+ * /verify page can fetch the canonical block timestamp and display it
+ * alongside the tx hash. Optional for backward compat with receipts that
+ * predate the field (they were issued without a blockNumber).
+ */
+export const ChainSchema = z.object({
+  txHash: z.string().optional(),
+  blockNumber: z.number().int().nonnegative().optional(),
+});
+export type Chain = z.infer<typeof ChainSchema>;
+
 // ─── Send receipt ────────────────────────────────────────────────────────────
 
 export const SendReceiptSchema = z.object({
@@ -120,7 +133,7 @@ export const SendReceiptSchema = z.object({
   riskChecks: z.array(RiskCheckSchema),
   compute: ComputeLegSchema.nullable(),
   confirmation: ConfirmationSchema,
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type SendReceipt = z.infer<typeof SendReceiptSchema>;
@@ -159,7 +172,7 @@ export const SwapReceiptSchema = z.object({
   riskChecks: z.array(RiskCheckSchema),
   compute: ComputeLegSchema.nullable(),
   confirmation: ConfirmationSchema,
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type SwapReceipt = z.infer<typeof SwapReceiptSchema>;
@@ -193,7 +206,7 @@ export const DcaReceiptSchema = z.object({
   compute: ComputeLegSchema.nullable(),
   confirmation: ConfirmationSchema,
   intentLink: IntentLinkSchema.optional(),
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type DcaReceipt = z.infer<typeof DcaReceiptSchema>;
@@ -228,7 +241,7 @@ export const AlertReceiptSchema = z.object({
   confirmation: ConfirmationSchema,
   intentLink: IntentLinkSchema.optional(),
   notification: NotificationSchema.optional(),
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type AlertReceipt = z.infer<typeof AlertReceiptSchema>;
@@ -271,7 +284,7 @@ export const KeyRevealReceiptSchema = z.object({
   riskChecks: z.array(RiskCheckSchema),
   compute: ComputeLegSchema.nullable(),
   confirmation: ConfirmationSchema,
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type KeyRevealReceipt = z.infer<typeof KeyRevealReceiptSchema>;
@@ -316,7 +329,7 @@ export const NftMintReceiptSchema = z.object({
   riskChecks: z.array(RiskCheckSchema),
   compute: ComputeLegSchema.nullable(),
   confirmation: ConfirmationSchema,
-  chain: z.object({ txHash: z.string().optional() }),
+  chain: ChainSchema,
   storage: z.object({ rootHash: z.string().optional() }),
 });
 export type NftMintReceipt = z.infer<typeof NftMintReceiptSchema>;

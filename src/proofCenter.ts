@@ -16,7 +16,33 @@ import { pingCompute } from './og/compute';
 import { provider } from './og/chain';
 import { config } from './config';
 import { intentStore } from './intents/intentStore';
-import { looksLikeReceipt, type IntentReceipt } from './receipts';
+import { looksLikeReceipt, type Confirmation, type IntentReceipt } from './receipts';
+
+// ─── Block-timestamp cache (5 min TTL) ─────────────────────────────────────
+//
+// provider.getBlock() is a single RPC call per block. Most receipts on the
+// /verify page share blocks (same DCA tick, same wallet session), so a small
+// in-memory cache keeps the page fast. Block timestamps are immutable on
+// chain — 5 min is just a memory cap, not a correctness bound.
+const BLOCK_TS_TTL_MS = 5 * 60 * 1000;
+const blockTsCache = new Map<number, { ts: string; fetchedAt: number }>();
+
+/** Fetch the canonical block timestamp for a receipt, formatted as `YYYY-MM-DD HH:MM:SS UTC`. */
+async function getBlockTimestamp(blockNumber: number): Promise<string | null> {
+  const cached = blockTsCache.get(blockNumber);
+  if (cached && Date.now() - cached.fetchedAt < BLOCK_TS_TTL_MS) {
+    return cached.ts;
+  }
+  try {
+    const block = await provider.getBlock(blockNumber);
+    if (!block) return null;
+    const ts = fmtTs(block.timestamp * 1000);
+    blockTsCache.set(blockNumber, { ts, fetchedAt: Date.now() });
+    return ts;
+  } catch {
+    return null;
+  }
+}
 
 // ─── HTML shell ──────────────────────────────────────────────────────────
 
@@ -82,11 +108,47 @@ function fmtTs(ts: number): string {
 }
 
 /**
+ * Confirmation methods that finalize without a separate "user pressed Confirm"
+ * event (NFT mint on first wallet creation, DCA tick, alert fire). For these,
+ * the `confirmedAt` field is the same value as `createdAt` / `finalizedAt`, so
+ * rendering a Confirmed At cell just duplicates the Created timestamp and
+ * confuses auditors on /verify.
+ *
+ * This set is the single source of truth: any new auto-confirm method added
+ * to `ConfirmationSchema.method` should be added here AND covered by a
+ * positive-case assertion in `scripts/test-verify-nft-mint.mjs`
+ * (runOmitHelper fixture) so /verify gets the right treatment by default.
+ */
+const AUTO_CONFIRM_METHODS: ReadonlySet<Confirmation['method']> = new Set([
+  'automatic',
+  'automatic_scheduled',
+]);
+
+/** Returns true when a receipt has no separate user Confirm event. */
+export function omitConfirmationTimestamp(r: IntentReceipt): boolean {
+  return AUTO_CONFIRM_METHODS.has(r.confirmation.method);
+}
+
+/**
  * Pure function — exported so unit tests can assert on the rendered HTML
  * without spinning up the HTTP server or mocking 0G Storage. The public
  * verifyPage() routes through this same function for any recovered receipt.
  */
-export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null): string {
+/**
+ * Pure function — exported so unit tests can assert on the rendered HTML
+ * without spinning up the HTTP server or mocking 0G Storage. The public
+ * verifyPage() routes through this same function for any recovered receipt.
+ *
+ * `blockTimestamp` is the canonical on-chain block timestamp for `chain.txHash`
+ * (pre-formatted as `YYYY-MM-DD HH:MM:SS UTC`). When present, the Chain card
+ * renders a "Block Timestamp" cell and the auto-confirm note points at it
+ * instead of the generic "see Chain below" wording.
+ */
+export function renderReceipt(
+  r: IntentReceipt,
+  rootHashOverride?: string | null,
+  blockTimestamp?: string | null,
+): string {
   const typeIcon =
     r.actionType === 'send' ? '📤' :
     r.actionType === 'swap' ? '🔄' :
@@ -109,6 +171,9 @@ export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null
   const txLine = r.chain.txHash
     ? `<a href="https://chainscan-galileo.0g.ai/tx/${r.chain.txHash}" target="_blank" class="mono">${redact(r.chain.txHash, 20)}</a>`
     : '<span class="muted">—</span>';
+  const blockTsCell = blockTimestamp
+    ? `<div><span class="muted">Block Timestamp</span><br><strong class="mono">${blockTimestamp}</strong></div>`
+    : '';
   // The 0G Storage rootHash is the receipt's identity, not its content. The
   // on-Storage copy never carries its own rootHash (the rootHash IS the hash
   // of the receipt, so self-reference is meaningless), so for /verify/:root
@@ -142,15 +207,10 @@ export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null
       <h2>2 · Parsed Intent</h2>
       <div class="grid">${parsedSection}</div>
     </div>`;
-  // Render "automatic" instead of the grey "pending" badge for receipts that
-  // are finalized without a user Confirm button — statusBadge() maps
-  // `required:false` to a misleading "pending" badge. Routed through
-  // confirmation.method so any future automatic receipt (nft_mint, dca
-  // execution, alert fire, or a new automatic actionType) gets the right
-  // label without a per-type enumeration update.
-  const isAutoConfirmedReceipt =
-    r.confirmation.method === 'automatic' ||
-    r.confirmation.method === 'automatic_scheduled';
+  // Single source of truth for the "auto-confirmed" treatment — see
+  // omitConfirmationTimestamp() above. New auto-confirm methods extend
+  // AUTO_CONFIRM_METHODS, not this call site.
+  const isAutoConfirmedReceipt = omitConfirmationTimestamp(r);
 
   // Optional intent link block (DCA execution / alert fire receipts).
   const intentLinkSection =
@@ -214,9 +274,13 @@ export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null
     <div class="card">
       <h2>5 · Confirmation</h2>
       <div class="grid">
-        <div><span class="muted">Required</span><br>${isAutoConfirmedReceipt ? '<strong>automatic</strong>' : statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>
+        ${isAutoConfirmedReceipt
+          ? '' // no Required cell — the note below already says "Auto-confirmed"
+          : `<div><span class="muted">Required</span><br>${statusBadge(r.confirmation.required ? 'ok' : 'pending')}</div>`}
         <div><span class="muted">Method</span><br><strong>${r.confirmation.method}</strong></div>
-        <div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>
+        ${isAutoConfirmedReceipt
+          ? `<div class="muted" style="grid-column:1/-1">${blockTimestamp ? `Auto-confirmed on-chain at ${blockTimestamp} (see Block Timestamp in Chain below).` : 'Auto-confirmed — see Chain below for the on-chain tx.'}</div>`
+          : `<div><span class="muted">Confirmed At</span><br><strong class="mono">${r.confirmation.confirmedAt ? fmtTs(r.confirmation.confirmedAt) : '—'}</strong></div>`}
       </div>
     </div>
 
@@ -226,6 +290,7 @@ export function renderReceipt(r: IntentReceipt, rootHashOverride?: string | null
       <h2>6 · Chain</h2>
       <div class="grid">
         <div><span class="muted">Tx Hash</span><br>${txLine}</div>
+        ${blockTsCell}
       </div>
     </div>
 
@@ -450,6 +515,14 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
     }
   }
 
+  // For real receipts (looksLikeReceipt), fetch the canonical on-chain block
+  // timestamp via a 5-min cached RPC call. Old receipts predating the
+  // blockNumber field skip this and the Chain card just shows the tx hash.
+  let blockTimestamp: string | null = null;
+  if (looksLikeReceipt(recovered) && recovered.chain?.blockNumber !== undefined) {
+    blockTimestamp = await getBlockTimestamp(recovered.chain.blockNumber);
+  }
+
   const body = html(`Verify ${redact(input, 18)}`, `
     <h1>Receipt Verification</h1>
     <div class="card">
@@ -462,7 +535,7 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
     </div>
     ${recovered ? (
       looksLikeReceipt(recovered)
-        ? renderReceipt(recovered as IntentReceipt, rootHash)
+        ? renderReceipt(recovered as IntentReceipt, rootHash, blockTimestamp)
         : `<div class="card"><h2>Recovered Data</h2><pre>${JSON.stringify(recovered, null, 2).slice(0, 4000)}</pre></div>`
     ) : `
     <div class="card">

@@ -35,10 +35,11 @@ process.env.OPERATOR_PRIVATE_KEY = '0x' + '11'.repeat(32);
 process.env.WALLET_ENCRYPTION_KEY = 'a'.repeat(32);
 process.env.OG_COMPUTE_API_KEY = 'dummy-key';
 
-const { renderReceipt } = await import('../src/proofCenter.ts');
+const { renderReceipt, omitConfirmationTimestamp } = await import('../src/proofCenter.ts');
 const {
   NftMintReceiptSchema,
   DcaReceiptSchema,
+  SendReceiptSchema,
 } = await import('../src/receipts/types.ts');
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ const nftMintFixture = {
     method: 'automatic',
     confirmedAt: NFT_TS,
   },
-  chain: { txHash: NFT_TX_HASH },
+  chain: { txHash: NFT_TX_HASH, blockNumber: 12345 },
   storage: { rootHash: NFT_ROOT_HASH },
 };
 
@@ -126,7 +127,7 @@ const dcaExecutedFixture = {
     confirmedAt: DCA_TS,
   },
   intentLink: { intentId: DCA_INTENT_ID },
-  chain: { txHash: DCA_TX_HASH },
+  chain: { txHash: DCA_TX_HASH, blockNumber: 67890 },
   storage: { rootHash: '0x' + '66'.repeat(32) },
 };
 
@@ -143,6 +144,39 @@ function validateFixture(label, schema, fixture) {
 
 const nftParsed = validateFixture('nft_mint', NftMintReceiptSchema, nftMintFixture);
 const dcaParsed = validateFixture('dca.executed', DcaReceiptSchema, dcaExecutedFixture);
+
+// Minimal send receipt — only used to prove omitConfirmationTimestamp returns
+// false for a MANUAL confirmation (telegram_inline_button). Kept inline so
+// the omit-helper test stays self-contained and doesn't bloat the shared
+// fixtures list.
+const sendReceiptFixture = {
+  version: 1,
+  receiptId: 'test-send-receipt-for-omit-helper',
+  actionType: 'send',
+  userId: '11111',
+  status: 'executed',
+  createdAt: NFT_TS,
+  finalizedAt: NFT_TS,
+  userIntent: { raw: 'send 1 OG to 0xab…ab', source: 'command' },
+  parsedIntent: {
+    type: 'send',
+    amount: '1',
+    asset: 'OG',
+    recipient: { kind: 'address', value: '0xab', resolvedAddress: '0x' + 'ab'.repeat(20) },
+    fromWalletId: 'w-100',
+    fromWalletName: 'Main',
+  },
+  riskChecks: [{ check: 'user_confirmed', status: 'pass', ts: NFT_TS }],
+  compute: null,
+  confirmation: {
+    required: true,
+    method: 'telegram_inline_button',
+    confirmedAt: NFT_TS,
+  },
+  chain: { txHash: NFT_TX_HASH },
+  storage: {},
+};
+const sendParsed = validateFixture('send', SendReceiptSchema, sendReceiptFixture);
 
 // ── Run assertions ────────────────────────────────────────────────────────
 
@@ -184,12 +218,23 @@ async function runNftMint() {
   await t('[nft_mint] "2 · Parsed Intent" card is fully omitted', () => {
     assert.equal(html.includes('Parsed Intent'), false, 'expected no "Parsed Intent" substring');
   });
-  await t('[nft_mint] Confirmed At cell renders the finalizedAt timestamp', () => {
-    // 1700000000000 ms → '2023-11-14 22:13:20 UTC' — check for the date prefix.
+  await t('[nft_mint] auto-confirmation: no "Confirmed At" cell (would just duplicate Created)', () => {
+    // For auto-confirmations there's no separate "user pressed Confirm" event,
+    // so the Confirmed At cell would just duplicate the Created timestamp. The
+    // renderer now hides it and shows a one-line note pointing at the Chain
+    // card for the canonical timestamp.
+    assert.equal(html.includes('Confirmed At'), false, 'expected no "Confirmed At" label for auto-confirmations');
+    assert.equal(
+      html.includes('Auto-confirmed'),
+      true,
+      'expected the auto-confirmation note',
+    );
+  });
+  await t('[nft_mint] Created cell still renders the timestamp (regression guard)', () => {
     assert.equal(
       html.includes('2023-11-14 22:13:20 UTC'),
       true,
-      'expected the Confirmed At timestamp in output',
+      'expected the Created timestamp to remain in the HTML (regression guard for the Created cell)',
     );
   });
   await t('[nft_mint] status badge is "ok" (minted → badge-ok, not the fallback badge-pending)', () => {
@@ -215,12 +260,24 @@ async function runDcaExecuted() {
     assert.equal(html.includes('Intent Link'), true, 'expected the Intent Link section');
     assert.equal(html.includes(DCA_INTENT_ID), true, `expected intentId ${DCA_INTENT_ID} in output`);
   });
-  await t('[dca.executed] Confirmed At cell renders the timestamp (regression guard for the auto_scheduled factory)', () => {
-    // 1700000060000 ms → '2023-11-14 22:14:20 UTC' — check for the date prefix.
+  await t('[dca.executed] auto-confirmation: no "Confirmed At" cell (would just duplicate Created)', () => {
+    assert.equal(html.includes('Confirmed At'), false, 'expected no "Confirmed At" label for auto-confirmations');
+    assert.equal(
+      html.includes('Auto-confirmed'),
+      true,
+      'expected the auto-confirmation note (without blockTimestamp it should still render the generic wording)',
+    );
+    assert.equal(
+      html.includes('see Chain below for the on-chain tx'),
+      true,
+      'expected the generic auto-confirm note when no blockTimestamp is passed',
+    );
+  });
+  await t('[dca.executed] Created cell still renders the timestamp (regression guard)', () => {
     assert.equal(
       html.includes('2023-11-14 22:14:20 UTC'),
       true,
-      'expected the Confirmed At timestamp in output (would fail if createDcaExecutionReceipt dropped confirmedAt)',
+      'expected the Created timestamp to remain in the HTML (regression guard for the Created cell)',
     );
   });
 }
@@ -270,13 +327,13 @@ async function runRootHashOverride() {
   });
 }
 
-// ── Wire check: prove verifyPage actually plumbs the URL rootHash ──────
+// ── Wire check: prove verifyPage actually plumbs the URL rootHash + blockTimestamp ──────
 //
 // The renderReceipt-level test above proves the parameter works. But the
 // /verify/:root page would still regress to "not yet uploaded" if someone
-// reverted the one-line `rootHash` argument at the verifyPage call site.
-// Cheap static check on the proofCenter.ts source catches that specific
-// regression with a clear failure message.
+// reverted the one-line `rootHash` argument at the verifyPage call site,
+// or drop the new blockTimestamp from the 3rd arg. Cheap static check on
+// the proofCenter.ts source catches both regressions with clear messages.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -284,15 +341,82 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const proofCenterSource = readFileSync(join(__dirname, '..', 'src', 'proofCenter.ts'), 'utf8');
 await t('[wire] verifyPage passes rootHash to renderReceipt (regression guard)', () => {
   assert.equal(
-    proofCenterSource.includes('renderReceipt(recovered as IntentReceipt, rootHash)'),
+    proofCenterSource.includes('renderReceipt(recovered as IntentReceipt, rootHash, blockTimestamp)'),
     true,
-    'expected verifyPage to call renderReceipt(..., rootHash) — otherwise /verify/:root regresses to "not yet uploaded"',
+    'expected verifyPage to call renderReceipt(..., rootHash, blockTimestamp) — otherwise /verify/:root regresses to "not yet uploaded"',
   );
 });
+
+// ── Block-timestamp parameter (Chain card + auto-confirm note) ──────
+//
+// The /verify page fetches the canonical on-chain block timestamp via
+// provider.getBlock(blockNumber) (5-min cached) and passes it to
+// renderReceipt as the 3rd arg. When present, the Chain card renders a
+// "Block Timestamp" cell and the auto-confirm note points at it. Without
+// it (old receipts without blockNumber, or fetcher failure), neither
+// shows up.
+async function runBlockTimestamp() {
+  console.log('\nrenderReceipt(nft_mint, override, blockTs) — fixture 4 (Chain card fix)');
+  const BLOCK_TS = '2024-01-15 10:30:00 UTC';
+  const html = renderReceipt(nftParsed, null, BLOCK_TS);
+  await t('[blockTs] Chain card renders the Block Timestamp cell when passed', () => {
+    assert.equal(html.includes('Block Timestamp'), true, 'expected "Block Timestamp" label in Chain card');
+    assert.equal(html.includes(BLOCK_TS), true, `expected the timestamp ${BLOCK_TS} in Chain card`);
+  });
+  await t('[blockTs] auto-confirm note now points at the on-chain timestamp', () => {
+    assert.equal(
+      html.includes(`Auto-confirmed on-chain at ${BLOCK_TS}`),
+      true,
+      'expected the auto-confirm note to reference the block timestamp when present',
+    );
+  });
+  await t('[blockTs] Without blockTimestamp, no Block Timestamp cell and generic auto-confirm note', () => {
+    const noTs = renderReceipt(nftParsed);
+    assert.equal(noTs.includes('Block Timestamp'), false, 'expected no "Block Timestamp" cell when not passed');
+    assert.equal(
+      noTs.includes('see Chain below for the on-chain tx'),
+      true,
+      'expected the generic auto-confirm note when blockTimestamp is absent',
+    );
+  });
+  await t('[blockTs] Works the same for dca.executed (parameter is actionType-agnostic)', () => {
+    const DCA_BLOCK_TS = '2024-02-20 14:00:00 UTC';
+    const dcaHtml = renderReceipt(dcaParsed, null, DCA_BLOCK_TS);
+    assert.equal(dcaHtml.includes('Block Timestamp'), true, 'expected Block Timestamp cell for dca');
+    assert.equal(dcaHtml.includes(DCA_BLOCK_TS), true, `expected ${DCA_BLOCK_TS} in dca Chain card`);
+    assert.equal(
+      dcaHtml.includes(`Auto-confirmed on-chain at ${DCA_BLOCK_TS}`),
+      true,
+      'expected the dca auto-confirm note to reference the block timestamp',
+    );
+  });
+}
+
+// ── omitConfirmationTimestamp helper (extension point) ──────
+//
+// This helper is the SINGLE source of truth for "should this receipt show
+// a Confirmed At cell?". A future new auto-confirm method added to
+// ConfirmationSchema.method MUST extend the OR-list inside the helper
+// and add a positive-case assertion here, or /verify will regress to
+// showing a Confirmed At cell that just duplicates the Created timestamp.
+async function runOmitHelper() {
+  console.log('\nrunOmitHelper() — helper-level coverage of the auto-confirm convention');
+  await t('[omit] nft_mint (method=automatic) → true', () => {
+    assert.equal(omitConfirmationTimestamp(nftParsed), true, 'expected true for automatic');
+  });
+  await t('[omit] dca.executed (method=automatic_scheduled) → true', () => {
+    assert.equal(omitConfirmationTimestamp(dcaParsed), true, 'expected true for automatic_scheduled');
+  });
+  await t('[omit] send (method=telegram_inline_button) → false (regression guard for the manual path)', () => {
+    assert.equal(omitConfirmationTimestamp(sendParsed), false, 'expected false for telegram_inline_button');
+  });
+}
 
 await runNftMint();
 await runDcaExecuted();
 await runRootHashOverride();
+await runBlockTimestamp();
+await runOmitHelper();
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) {

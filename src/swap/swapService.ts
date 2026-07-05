@@ -27,7 +27,7 @@ export interface SwapRequest {
 
 export type PrepareResult = { ok: true; summary: string } | { ok: false; error: string };
 export type ExecuteResult =
-  | { ok: true; hash: string; summary: string; receiptId?: string; receiptRootHash?: string | null }
+  | { ok: true; hash: string; summary: string; receiptId?: string; receiptRootHash?: string | null; blockNumber?: number }
   | { ok: false; error: string };
 
 const NATIVE_NAMES = new Set(['OG', '0G', 'A0GI', 'NATIVE', 'ETH']);
@@ -216,29 +216,40 @@ export async function executeSwap(userId: string): Promise<ExecuteResult> {
   const amountWei = BigInt(p.amountWei);
   try {
     let hash: string;
+    let blockNumber: number | undefined;
     if (p.kind === 'wrap') {
       const tx = await wrap(signer, amountWei);
-      hash = (await tx.wait())?.hash ?? tx.hash;
+      const r = await tx.wait();
+      hash = r?.hash ?? tx.hash;
+      blockNumber = r?.blockNumber;
     } else if (p.kind === 'unwrap') {
       const tx = await unwrap(signer, amountWei);
-      hash = (await tx.wait())?.hash ?? tx.hash;
+      const r = await tx.wait();
+      hash = r?.hash ?? tx.hash;
+      blockNumber = r?.blockNumber;
     } else {
       const minOut = BigInt(p.minOutWei ?? '0');
       const path = p.path ?? [];
       const to = await signer.getAddress();
       if (p.routeKind === 'native-to-token') {
         const tx = await swapExactNativeForTokens(signer, amountWei, minOut, path, to);
-        hash = (await tx.wait())?.hash ?? tx.hash;
+        const r = await tx.wait();
+        hash = r?.hash ?? tx.hash;
+        blockNumber = r?.blockNumber;
       } else if (p.routeKind === 'token-to-native') {
         await ensureAllowance(path[0]!, to, config.DEX_ROUTER_ADDRESS, amountWei, signer);
         if (p.receiptId) markApprovalOk(p.receiptId);
         const tx = await swapExactTokensForNative(signer, amountWei, minOut, path, to);
-        hash = (await tx.wait())?.hash ?? tx.hash;
+        const r = await tx.wait();
+        hash = r?.hash ?? tx.hash;
+        blockNumber = r?.blockNumber;
       } else {
         await ensureAllowance(path[0]!, to, config.DEX_ROUTER_ADDRESS, amountWei, signer);
         if (p.receiptId) markApprovalOk(p.receiptId);
         const tx = await swapExactTokensForTokens(signer, amountWei, minOut, path, to);
-        hash = (await tx.wait())?.hash ?? tx.hash;
+        const r = await tx.wait();
+        hash = r?.hash ?? tx.hash;
+        blockNumber = r?.blockNumber;
       }
     }
     pendingSwaps.clear(userId);
@@ -249,14 +260,14 @@ export async function executeSwap(userId: string): Promise<ExecuteResult> {
     let receiptRootHash: string | null = null;
     if (p.receiptId) {
       try {
-        const finalized = await finalizeReceipt(p.receiptId, hash);
+        const finalized = await finalizeReceipt(p.receiptId, hash, blockNumber);
         receiptRootHash = finalized?.rootHash ?? null;
       } catch (e) {
         console.warn(`[swap] receipt finalize failed for ${p.receiptId}:`, (e as Error).message);
       }
     }
 
-    return { ok: true, hash, summary: p.summary, receiptId: p.receiptId, receiptRootHash };
+    return { ok: true, hash, summary: p.summary, receiptId: p.receiptId, receiptRootHash, blockNumber };
   } catch (e) {
     pendingSwaps.clear(userId);
     if (p.receiptId) failReceipt(p.receiptId, (e as Error).message).catch(() => {});

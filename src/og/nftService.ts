@@ -128,9 +128,10 @@ export async function mintProfileNft(
     tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
   }
 
-  const tx = await (c.mint(userAddress, tokenUri) as Promise<{ wait: () => Promise<{ hash: string }> }>);
-  const receipt = await tx.wait();
-  const txHash = receipt.hash;
+  const tx = await (c.mint(userAddress, tokenUri) as Promise<{ wait: () => Promise<{ hash: string; blockNumber: number }> }>);
+  const txReceipt = await tx.wait();
+  const txHash = txReceipt.hash;
+  const blockNumber = txReceipt.blockNumber;
 
   // Read back the tokenId from the contract (profileOf)
   const tokenIdBig: bigint = await c.profileOf(userAddress);
@@ -156,6 +157,7 @@ export async function mintProfileNft(
       tokenURI: tokenUri,
       metadataStorageRootHash: rootHash,
       txHash,
+      blockNumber,
     });
     receiptId = r.receiptId;
     receiptRootHash = r.rootHash;

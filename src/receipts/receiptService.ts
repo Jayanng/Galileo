@@ -367,6 +367,7 @@ export interface DcaExecutionInput {
   walletId: string;
   walletName?: string;
   txHash: string;
+  blockNumber?: number;
 }
 
 export async function createDcaExecutionReceipt(input: DcaExecutionInput): Promise<CreateResult> {
@@ -414,7 +415,10 @@ export async function createDcaExecutionReceipt(input: DcaExecutionInput): Promi
       intentId: input.intentId,
       creationReceiptId: input.creationReceiptId,
     },
-    chain: { txHash: input.txHash },
+    chain: {
+      txHash: input.txHash,
+      blockNumber: input.blockNumber,
+    },
     storage: {},
   };
   return emitReceipt(receipt);
@@ -650,6 +654,7 @@ export interface CreateNftMintInput {
   tokenURI: string;
   metadataStorageRootHash?: string | null;
   txHash: string;
+  blockNumber?: number;
 }
 
 export async function createNftMintReceipt(input: CreateNftMintInput): Promise<CreateResult> {
@@ -696,7 +701,10 @@ export async function createNftMintReceipt(input: CreateNftMintInput): Promise<C
       // and auditors can compare it against the on-chain block timestamp.
       confirmedAt: now,
     },
-    chain: { txHash: input.txHash },
+    chain: {
+      txHash: input.txHash,
+      blockNumber: input.blockNumber,
+    },
     storage: {},
   };
   return emitReceipt(receipt);
@@ -715,6 +723,7 @@ export async function createNftMintReceipt(input: CreateNftMintInput): Promise<C
 export async function finalizeReceipt(
   receiptId: string,
   txHash: string,
+  blockNumber?: number,
 ): Promise<FinalizeResult | null> {
   const receipt = cache.get(receiptId);
   if (!receipt) return null;
@@ -723,6 +732,9 @@ export async function finalizeReceipt(
   receipt.status = 'executed';
   receipt.finalizedAt = now;
   receipt.chain.txHash = txHash;
+  if (blockNumber !== undefined) {
+    receipt.chain.blockNumber = blockNumber;
+  }
 
   for (const c of receipt.riskChecks) {
     if (c.check === 'user_confirmed') {

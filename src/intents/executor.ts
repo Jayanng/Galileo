@@ -220,6 +220,8 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
     hash: result.hash,
   }).catch(() => {});
   // F5: emit a DCA execution receipt (links back to creation receipt via intentId).
+  // blockNumber from the underlying swap tx lets /verify render the on-chain
+  // block timestamp alongside the tx hash.
   createDcaExecutionReceipt({
     userId: intent.userId,
     intentId: intent.id,
@@ -232,6 +234,7 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
     walletId: intent.walletId,
     walletName: wallet.name,
     txHash: result.hash,
+    blockNumber: result.blockNumber,
   }).catch((e) => console.warn(`[intents] DCA execution receipt failed:`, (e as Error).message));
   await bot.api.sendMessage(
     intent.userId,

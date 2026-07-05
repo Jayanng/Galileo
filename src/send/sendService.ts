@@ -107,15 +107,16 @@ export async function executeSend(userId: string): Promise<ExecuteSendResult> {
 
   try {
     const tx = await signer.sendTransaction({ to: p.toAddress, value: BigInt(p.amountWei) });
-    await tx.wait();
+    const txReceipt = await tx.wait();
     recordTx(userId, { type: 'send', amount: p.amountLabel, to: p.toAddress, hash: tx.hash }).catch(() => {});
 
     // F5: finalize the Verified Intent Receipt (sets txHash + user_confirmed,
-    // uploads to 0G Storage under receipt:<id>, indexes the rootHash).
+    // uploads to 0G Storage under receipt:<id>, indexes the rootHash). The
+    // block number lets /verify render the canonical on-chain block timestamp.
     let receiptRootHash: string | null = null;
     if (p.receiptId) {
       try {
-        const finalized = await finalizeReceipt(p.receiptId, tx.hash);
+        const finalized = await finalizeReceipt(p.receiptId, tx.hash, txReceipt?.blockNumber);
         receiptRootHash = finalized?.rootHash ?? null;
       } catch (e) {
         console.warn(`[send] receipt finalize failed for ${p.receiptId}:`, (e as Error).message);

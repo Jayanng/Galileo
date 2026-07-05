@@ -193,39 +193,6 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
  */
 const perUserTokenWindows = new Map<string, Array<{ ts: number; tokens: number }>>();
 
-/**
- * Rough token estimate for a set of chat messages.
- *
- * We can't know the true prompt cost until the provider responds, but the
- * budget gate must reserve *something* up front — otherwise the agent loop's
- * back-to-back iterations all sail through before any usage is recorded, and
- * we overshoot the per-minute limit mid-loop (the classic cause of 429s).
- *
- * Heuristic: ~4 characters per token (OpenAI's rule of thumb), plus a small
- * per-message overhead for role/formatting tokens. Tool definitions add a
- * fixed pad. This deliberately over-estimates a little so we throttle *before*
- * hitting the wall rather than after.
- */
-function estimateTokens(messages: ChatMessage[], tools?: ChatTool[]): number {
-  let chars = 0;
-  for (const m of messages) {
-    if (typeof m.content === 'string') {
-      chars += m.content.length;
-    } else if (Array.isArray(m.content)) {
-      for (const part of m.content) {
-        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
-          chars += part.text.length;
-        }
-      }
-    }
-    chars += 16; // per-message role/formatting overhead
-  }
-  const toolPad = tools && tools.length > 0 ? tools.length * 120 : 0;
-  // +completion headroom: reserve for the model's reply as well, so a full
-  // round-trip is accounted for, not just the prompt.
-  return Math.ceil(chars / 4) + toolPad + 256;
-}
-
 /** Sum the user's non-expired token usage in the rolling window (prunes in place). */
 function rollingUsage(userId: string, now: number): { window: Array<{ ts: number; tokens: number }>; used: number } {
   const window = perUserTokenWindows.get(userId) ?? [];
@@ -237,27 +204,20 @@ function rollingUsage(userId: string, now: number): { window: Array<{ ts: number
 }
 
 /**
- * Block until the rolling 60-second token usage for THIS user, PLUS the
- * estimated cost of the request we're about to send, fits within the per-user
- * limit. Called before every provider request.
+ * Block until the rolling 60-second ACTUAL token usage for this user fits
+ * within the per-user limit. Uses recorded token counts from provider
+ * responses, not pre-request estimates.
  *
- * Reserving the estimated cost up front is what makes the agent loop
- * self-throttle: iteration N+1 sees iteration N's estimate already reserved
- * (via a placeholder entry), so it waits instead of firing blindly. The
- * placeholder is reconciled with the true usage in recordTokenUsage().
+ * Since every request carries the system prompt + tools (~3-4K tokens input),
+ * any single request exceeds the 2000/min budget on its own. The gate only
+ * triggers when the user already has two or more requests recorded in the
+ * window (actual usage > 2000) — giving roughly 2 fast messages per minute
+ * before throttling kicks in. The provider 429 backstop handles overages.
  *
- * When a single request's estimate already exceeds the per-minute limit
- * (common with the large system prompt + tools), the gate allows it through
- * with a warning — blocking it would deadlock since it can never fit.
- * Consecutive large requests are then blocked by the rolling window until
- * older entries expire.
- *
- * @param userId    Telegram user ID. When undefined (e.g. startup ping),
- *                  the rate limiter is skipped entirely.
- * @param estimated Estimated token cost of the imminent request.
+ * @param userId  Telegram user ID. When undefined, gate is skipped.
  */
-async function waitForTokenBudget(userId?: string, estimated = 0): Promise<void> {
-  if (!userId) return; // startup/health-check pings skip the gate
+async function waitForTokenBudget(userId?: string): Promise<void> {
+  if (!userId) return;
 
   const startedAt = Date.now();
   const MAX_WAIT_MS = 65_000;
@@ -266,40 +226,24 @@ async function waitForTokenBudget(userId?: string, estimated = 0): Promise<void>
     const now = Date.now();
 
     if (now - startedAt > MAX_WAIT_MS) {
-      console.warn(
-        `[compute] rate-limit gate (user=${userId}): waited >${Math.round(MAX_WAIT_MS / 1000)}s — releasing`,
-      );
+      console.warn(`[compute] rate-limit gate (user=${userId}): waited >${Math.round(MAX_WAIT_MS / 1000)}s — releasing`);
       return;
     }
 
     const { window, used } = rollingUsage(userId, now);
 
-    if (used + estimated <= RATE_LIMIT_TOKENS_PER_MIN) {
+    if (used <= RATE_LIMIT_TOKENS_PER_MIN) {
       if (window.length > 0) perUserTokenWindows.set(userId, window);
       else perUserTokenWindows.delete(userId);
       return;
     }
 
-    // When a single request alone blows the budget (e.g. system prompt + tools
-    // is ~7K tokens) and the user hasn't used anything in the current window,
-    // blocking it forever is a deadlock — every future check also fails.
-    // Allow it through and let the global gate + provider 429 backstop handle it.
-    if (used === 0) {
-      console.warn(
-        `[compute] rate-limit gate (user=${userId}): single-request est ${estimated} > ${RATE_LIMIT_TOKENS_PER_MIN} limit — allowing through (used=0)`,
-      );
-      perUserTokenWindows.delete(userId);
-      return;
-    }
-
     perUserTokenWindows.set(userId, window);
-
-    // Wait until the oldest entry expires (or a floor of 1s to avoid a busy loop).
     const oldestTs = window[0]!.ts;
     const remaining = oldestTs + RATE_LIMIT_WINDOW_MS - now;
     const waitMs = Math.max(1000, remaining + 500);
     console.warn(
-      `[compute] rate-limit gate (user=${userId}): ${used}+${estimated} est / ${RATE_LIMIT_TOKENS_PER_MIN} tokens in last 60s — waiting ${Math.round(waitMs / 1000)}s`,
+      `[compute] rate-limit gate (user=${userId}): ${used} actual tokens in last 60s — waiting ${Math.round(waitMs / 1000)}s`,
     );
     await new Promise((r) => setTimeout(r, waitMs));
   }
@@ -315,7 +259,6 @@ async function waitForTokenBudget(userId?: string, estimated = 0): Promise<void>
 function recordTokenUsage(
   userId: string | undefined,
   usage: OpenAI.Completions.CompletionUsage | undefined,
-  reservationTs: number | null = null,
 ): void {
   const tokens = usage ? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0) : 0;
 
@@ -330,13 +273,6 @@ function recordTokenUsage(
   }
 
   const window = perUserTokenWindows.get(userId) ?? [];
-
-  // Reconcile the up-front reservation: drop the placeholder entry we added
-  // in reserveTokens() so we don't double-count (reserved estimate + real).
-  if (reservationTs !== null) {
-    const idx = window.findIndex((e) => e.ts === reservationTs);
-    if (idx !== -1) window.splice(idx, 1);
-  }
 
   if (tokens > 0) {
     window.push({ ts: Date.now(), tokens });
@@ -353,21 +289,6 @@ function recordTokenUsage(
       `[compute] tokens (user=${userId}): prompt=${usage.prompt_tokens ?? 0} completion=${usage.completion_tokens ?? 0} total=${tokens} | rolling 60s: ${rolling}/${RATE_LIMIT_TOKENS_PER_MIN}`,
     );
   }
-}
-
-/**
- * Release a reservation without recording real usage — called when a request
- * throws (network error, exhausted 429 retries) so a failed call doesn't leave
- * an inflated placeholder blocking the user's budget for a full minute.
- */
-function releaseReservation(userId: string | undefined, reservationTs: number | null): void {
-  if (!userId || reservationTs === null) return;
-  const window = perUserTokenWindows.get(userId);
-  if (!window) return;
-  const idx = window.findIndex((e) => e.ts === reservationTs);
-  if (idx !== -1) window.splice(idx, 1);
-  if (window.length > 0) perUserTokenWindows.set(userId, window);
-  else perUserTokenWindows.delete(userId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -389,14 +310,12 @@ function globalRollingUsage(now: number): { used: number } {
 }
 
 /**
- * Block until combined token usage across ALL users, PLUS the estimated cost
- * of this request, fits within the account-level 2000 tokens/min limit.
- *
- * Like the per-user gate, a single oversized request is allowed through
- * (with a warning) rather than deadlocked. The provider 429 backstop still
- * applies for the remaining headroom.
+ * Block until combined ACTUAL token usage across ALL users fits within the
+ * account-level 2000 tokens/min limit. Like the per-user gate, uses recorded
+ * usage not estimates — gives roughly 2 fast messages across all users per
+ * minute before throttling.
  */
-async function waitForGlobalTokenBudget(userId?: string, estimated = 0): Promise<void> {
+async function waitForGlobalTokenBudget(userId?: string): Promise<void> {
   if (!userId) return;
 
   const startedAt = Date.now();
@@ -406,28 +325,19 @@ async function waitForGlobalTokenBudget(userId?: string, estimated = 0): Promise
     const now = Date.now();
 
     if (now - startedAt > MAX_WAIT_MS) {
-      console.warn(
-        `[compute] global rate-limit gate: waited >${Math.round(MAX_WAIT_MS / 1000)}s — releasing`,
-      );
+      console.warn(`[compute] global gate: waited >${Math.round(MAX_WAIT_MS / 1000)}s — releasing`);
       return;
     }
 
     const { used } = globalRollingUsage(now);
 
-    if (used + estimated <= RATE_LIMIT_TOKENS_PER_MIN) return;
-
-    if (used === 0) {
-      console.warn(
-        `[compute] global rate-limit gate: single-request est ${estimated} > ${RATE_LIMIT_TOKENS_PER_MIN} limit — allowing through (globalUsed=0)`,
-      );
-      return;
-    }
+    if (used <= RATE_LIMIT_TOKENS_PER_MIN) return;
 
     const oldestTs = globalTokenWindow[0]!.ts;
     const remaining = oldestTs + RATE_LIMIT_WINDOW_MS - now;
     const waitMs = Math.max(1000, remaining + 500);
     console.warn(
-      `[compute] global rate-limit gate: ${used}+${estimated} est / ${RATE_LIMIT_TOKENS_PER_MIN} tokens in last 60s — waiting ${Math.round(waitMs / 1000)}s`,
+      `[compute] global gate: ${used} actual tokens in last 60s — waiting ${Math.round(waitMs / 1000)}s`,
     );
     await new Promise((r) => setTimeout(r, waitMs));
   }
@@ -497,24 +407,18 @@ export async function chatVerified(
     return { ...r, chatID: null, providerAddress: null, verified: null };
   }
 
-  // Estimate this request's token cost and gate on (past usage + estimate),
-  // then RESERVE the estimate so concurrent/looping requests see it too.
-  // Both per-user and global (account-level) gates are checked — the provider's
-  // 2000 tokens/min limit is per operator account, not per Telegram user.
-  const estimated = estimateTokens(messages, tools);
-  await waitForTokenBudget(opts.userId, estimated);
-  await waitForGlobalTokenBudget(opts.userId, estimated);
-  const reservationTs = reserveTokens(opts.userId, estimated);
+  // Gate on actual recorded usage, not estimates. Every request carries the
+  // system prompt + tools (~3-4K tokens) so estimate-based gating blocks
+  // everything. Instead, let ~2 messages through per minute before throttling
+  // — the provider 429 backstop catches any remaining overages.
+  await waitForTokenBudget(opts.userId);
+  await waitForGlobalTokenBudget(opts.userId);
 
   // Acquire concurrency slot before any SDK/network calls
   await acquireSlot();
   try {
-    return await doChatVerified(messages, tools, opts, providerAddress, reservationTs);
+    return await doChatVerified(messages, tools, opts, providerAddress);
   } catch (err) {
-    // A failed request (network error, exhausted 429 retries) never reaches
-    // recordTokenUsage, so release the reservation here to avoid blocking the
-    // user's budget with a phantom estimate for a full minute.
-    releaseReservation(opts.userId, reservationTs);
     throw err;
   } finally {
     releaseSlot();
@@ -545,7 +449,6 @@ async function doChatVerified(
   tools: ChatTool[] | undefined,
   opts: VerifiedCallOptions,
   providerAddress: string,
-  reservationTs: number | null = null,
 ): Promise<ChatVerifiedResult> {
   const broker = getBroker();
   const startedAt = Date.now();
@@ -592,7 +495,7 @@ async function doChatVerified(
 
   // Record actual token usage for the rate limiter + log it. This also
   // reconciles the up-front reservation (reservationTs) with the true cost.
-  recordTokenUsage(opts.userId, bodyJson.usage, reservationTs);
+  recordTokenUsage(opts.userId, bodyJson.usage);
 
   // Build usage JSON for the broker's processResponse (fee caching).
   const usage = bodyJson.usage;

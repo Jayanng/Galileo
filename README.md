@@ -173,6 +173,23 @@ The 0G Compute Network SDK signs each request and verifies the provider's TEE-si
 response. Verified chat IDs are persisted to 0G Storage alongside your conversation history —
 send `/proof` to see the last 10.
 
+### 🏛 Public Proof Center — Verifiable in Any Browser
+
+Galileo ships a web-based audit dashboard that proves every on-chain action without
+screenshot trust or Telegram access:
+
+| Route | Purpose |
+|---|---|
+| [`/proofs`](https://galileo-test.fly.dev/proofs) | Live feed of system config, chain info, and audit trail |
+| [`/status`](https://galileo-test.fly.dev/status) | Health dashboard — compute TEE status, chain block #, storage, uptime |
+| [`/intents/live`](https://galileo-test.fly.dev/intents/live) | DCA & alert executions — status badges, timestamps, tx links to chainscan |
+| [`/verify/:root`](https://galileo-test.fly.dev/verify/) | Recover and verify a receipt from 0G Storage by root hash or user ID |
+
+Every page includes the chain ID, evidence source status, and UTC timestamps. No framework,
+no external CSS — minimal HTML that renders in any browser.
+
+Access it directly from Telegram via the **🔍 Proof Center** button on the `/start` dashboard.
+
 ### 🔒 Security
 
 - Private keys encrypted at rest (**AES-256-GCM**)
@@ -216,7 +233,7 @@ for the layered architecture diagram and design rationale.
 
 ### 🤖 AI Tools (the depth under the hood)
 
-The agent exposes **26 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
+The agent exposes **25 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
 `src/ai/toolExecutor.ts`. Grouped by area:
 
 - **Wallet CRUD** — `create_wallet`, `list_wallets`, `get_balance`, `get_wallet_address`,
@@ -425,6 +442,7 @@ src/
 ├── config.ts                 # Zod-validated environment config
 ├── bot.ts                    # grammY bot setup + routing
 ├── health.ts                 # /health + /proofs HTTP endpoints
+├── proofCenter.ts            # Public audit dashboard (/proofs, /status, /intents/live, /verify/:root)
 ├── faq.ts                    # /help FAQ text
 ├── helpContent.ts            # Shared /help + onboarding copy
 │
@@ -443,7 +461,7 @@ src/
 │   └── nftService.ts          # Profile NFT mint, query, metadata update (backs get_profile_nft)
 │
 ├── ai/
-│   ├── agent.ts              # Tool-calling agent loop (max 3 iterations)
+│   ├── agent.ts              # Tool-calling agent loop (max 5 iterations)
 │   ├── tools.ts              # Tool definitions (26 tools)
 │   ├── toolExecutor.ts       # Dispatches LLM tool calls to services
 │   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
@@ -529,6 +547,7 @@ scripts/
 | **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 6 AI tools; ticks every 30s, survives restarts via 0G Storage) |
 | **Telegram Mini-App Dashboard** — Portfolio, history, proof as embedded WebApp | ⏳ Planned |
 | **Profile NFT** Soulbound ERC-721 per user (`GALPRO`), auto-mint on first wallet | ✅ Complete |
+| **Proof Center** Web-verifiable audit dashboard at `/proofs`, `/status`, `/intents/live`, `/verify/:root` | ✅ Complete |
 | **Multi-Agent Sub-Personalities** — Trader/Analyst/Security/Tax modes with auto-routing | ⏳ Planned |
 | **Voice Messages** — Talk instead of typing | ⏳ Planned |
 | **Family & Group Wallets** — Shared wallets for family and groups | ⏳ Planned |

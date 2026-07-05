@@ -51,6 +51,7 @@ export const COMMANDS: ReadonlyArray<Command> = [
   { name: 'cancel',   description: 'cancel an intent by id' },
   { name: 'pause',    description: 'pause or resume an intent by id' },
   { name: 'proof',    description: 'show your last 10 TEE-verified replies' },
+  { name: 'skip',     description: 'skip the wallet naming prompt (keep current name)' },
   { name: 'help',     description: 'this guide' },
 ];
 

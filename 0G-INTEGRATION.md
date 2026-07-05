@@ -243,12 +243,12 @@ When `OG_STORAGE_ENABLED=true`:
 
 - `hydrate()` at startup reads the latest index snapshot from 0G Storage and populates the in-memory Map. Typically <1s for a small JSON file.
 - Every `record()` call fires a non-blocking `persist()` that uploads the current Map state via `uploadJson(STORAGE_KEY, snapshot)`. The upload runs on the event loop and never blocks the caller.
-- If `OG_STORAGE_ENABLED=false` (default in `.env.example`), both `hydrate()` and `persist()` are no-ops; the registry works exactly as the original in-memory-only design.
+- If `OG_STORAGE_ENABLED=false`, both `hydrate()` and `persist()` are no-ops; the registry works exactly as the original in-memory-only design.
 - If 0G Storage is unavailable mid-session, `persist()` logs a warning and the in-memory Map continues to serve lookups. The next successful `record()` will retry the upload.
 
 ### Trade-off (intentional)
 
-With persistence disabled, `/send @handle` may fail after a restart for handles whose owners haven't sent a new message yet. With persistence enabled, `hydrate()` closes that cold-start window. The shipped default is `OG_STORAGE_ENABLED=false` because the cold-start rebuild is fast enough for the typical demo flow and avoids storage cost; flip it on for production deployments that need cross-restart consistency on the first try.
+With persistence disabled, `/send @handle` may fail after a restart for handles whose owners haven't sent a new message yet. With persistence enabled, `hydrate()` closes that cold-start window. The shipped default is `OG_STORAGE_ENABLED=true`; flip it off for environments that want to avoid storage costs.
 
 ---
 
@@ -261,7 +261,7 @@ With persistence disabled, `/send @handle` may fail after a restart for handles 
 | **API Key** | `OG_COMPUTE_API_KEY` (from [pc.testnet.0g.ai](https://pc.testnet.0g.ai)) | — |
 | **Provider** | Discovered on-chain at startup; filtered: `serviceType=chatbot` + `verifiability=TeeML` | `computeBroker.ts` |
 | **Provider Override** | `OG_COMPUTE_PROVIDER_ADDRESS` (optional) | — |
-| **Fund Amount** | `OG_COMPUTE_FUND_AMOUNT` (default `3` OG) | — |
+| **Fund Amount** | `OG_COMPUTE_FUND_AMOUNT` (default `1` OG) | — |
 | **Fallback URL** | `https://router-api-testnet.integratenetwork.work/v1` | `config.OG_COMPUTE_BASE_URL` |
 | **Fallback Mode** | `OG_COMPUTE_FALLBACK=true` (disables TEE verification) | — |
 
@@ -393,7 +393,12 @@ Served at: `/proofs` on the health endpoint.
 |---|---|
 | **Port** | `8080` (configurable via `PORT` env) |
 | **Endpoint** | `GET /health` → `{"status":"ok","uptime":N}` |
-| **Endpoint** | `GET /proofs` → `public/proofs.json` |
+| **Endpoint** | `GET /` → `{"status":"ok","uptime":N}` (alias for /health) |
+| **Endpoint** | `GET /proofs` → Public Proof Center live feed (HTML) |
+| **Endpoint** | `GET /proofs.json` → Raw JSON proof index (legacy, backward compat) |
+| **Endpoint** | `GET /status` → Health dashboard (compute TEE status, chain block #, storage, uptime) |
+| **Endpoint** | `GET /intents/live` → DCA & alert executions with status badges, timestamps, tx links |
+| **Endpoint** | `GET /verify/:root` → Recover and verify a receipt from 0G Storage by root hash or user ID |
 | **Uptime Monitor** | UptimeRobot / Better Stack on `/health` |
 
 ---
@@ -490,3 +495,59 @@ const tx = await c.mint(userAddress, tokenUri);  // operator pays gas
 - `updateProfileMetadata()` supports updating the tokenURI for living resume features
 
 Use it whenever the user asks "how many transactions?", "what's my total volume?", or "my activity totals". `onChainTxCount` is a raw number only — it has NO details about destinations, amounts, or wallet names. For per-transaction details, follow up with `search_history`.
+
+---
+
+## 11. On-Chain Explainers (`explain_contract` + `explain_transaction`)
+
+Two read-only AI tools that inspect on-chain data without signing anything. Both are
+backed by dedicated explorer modules in `src/og/`.
+
+### `explain_contract` — `src/og/contractExplorer.ts` (211 lines)
+
+Looks up any contract address on the 0G chain and returns human-readable metadata:
+
+- **Known alias table** — cross-references WOG, USDC, USDT, DEX Router, and DEX Factory
+  addresses to display the contract name and purpose instead of raw hex
+- **ERC-20 metadata** — calls `name()`, `symbol()`, `decimals()` on the contract to read
+  token metadata from chain
+- **Bytecode check** — uses `eth_getCode` to confirm the address has deployed bytecode
+- **Fallback** — for unknown addresses, reports the top 10 bytes of bytecode (useful for
+  identifying unverified proxy implementations)
+
+### `explain_transaction` — `src/og/transactionExplorer.ts` (324 lines)
+
+Fetches a transaction receipt by hash and produces a structured `TxExplanation`:
+
+| Field | Source |
+|---|---|
+| **from / to** | `tx.from`, `tx.to` (or contract address from receipt) |
+| **value** | `tx.value` in wei, converted to OG |
+| **gasUsed / gasPrice** | From the receipt |
+| **status** | `receipt.status` — `succeeded` (1) or `reverted` (0) |
+| **txKind** | Classified into 8 categories from calldata: |
+
+**TxKind classification** (9 function selectors recognized):
+
+| Selector | TxKind |
+|---|---|
+| `0xa9059cbb` | `erc20-transfer` |
+| `0x095ea7b3` | `erc20-approve` |
+| `0xd0e30db0` | `wrap` (WOG deposit) |
+| `0x2e1a7d4d` | `unwrap` (WOG withdraw) |
+| `0x38ed1739` | `uniswap-swap` (exact input for tokens) |
+| `0x18cbafe5` | `uniswap-swap` (exact input for OG) |
+| `0x7ff36ab5` | `uniswap-swap` (exact OG in) |
+| `0x791ac947` | `uniswap-swap` (exact input high-level) |
+| `0x5c11d795` | `uniswap-swap` (exact input via WOG) |
+
+The explanation maps each `TxKind` to a natural-language phrase the AI agent can embed
+in its response (e.g. "This was an ERC-20 token transfer", "Wrapped OG to WOG", etc.).
+
+### User-facing
+
+Users trigger these via the AI agent with natural language:
+- *"what is this contract? 0x…"* — calls `explain_contract`
+- *"what did this transaction do? 0x…"* — calls `explain_transaction`
+
+Both are pure-read, never sign anything, and consume zero gas.

@@ -34,7 +34,7 @@ const schema = z.object({
   WALLET_STORE_PATH: z.string().default('.data/wallets.json'),
 
   // 0G Storage (optional in this phase) — file mode only
-  OG_STORAGE_ENABLED: boolEnv(false),
+  OG_STORAGE_ENABLED: boolEnv(true),
   OG_INDEXER_RPC: z.string().url().default('https://indexer-storage-testnet-turbo.0g.ai'),
 
   // 0G Compute — official 0g-compute-ts-sdk broker (TEE-verifiable inference)

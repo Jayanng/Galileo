@@ -2,7 +2,7 @@
 [![0G Chain](https://img.shields.io/badge/0G-Galileo%20Testnet-00D4AA)](https://0g.ai)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![CI](https://github.com/Jayanng/Galileo/actions/workflows/ci.yml/badge.svg)](https://github.com/Jayanng/Galileo/actions)
+[![CI](https://github.com/Jayanng/Galileo/actions/workflows/ci.yml/badge.svg?branch=Master&event=push)](https://github.com/Jayanng/Galileo/actions)
 [![0G Integration](https://img.shields.io/badge/0G_Integration-Reference-00D4AA)](0G-INTEGRATION.md)
 [![Live on Telegram](https://img.shields.io/badge/Live%20on-Telegram-26A5E4?logo=telegram)](https://t.me/galileoOGbot)
 [![Multi--Language](https://img.shields.io/badge/Languages-10%2B-00D4AA)]()

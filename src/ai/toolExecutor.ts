@@ -89,7 +89,7 @@ export async function executeTool(
     switch (toolName) {
       case 'create_wallet': {
         const name = typeof args.name === 'string' ? args.name : undefined;
-        const wallet = await createWallet(userId, name);
+        const { wallet, profileNft } = await createWallet(userId, name);
         return {
           success: true,
           data: {
@@ -101,6 +101,17 @@ export async function executeTool(
               dateStyle: 'long',
               timeStyle: 'short',
             }) + ' UTC',
+            // Surfaced so the LLM can mention the Agent NFT mint in natural
+            // language if the user asked about it — silent when not minted.
+            profileNft: profileNft.status === 'minted'
+              ? {
+                  status: 'minted',
+                  tokenId: profileNft.tokenId,
+                  txHash: profileNft.txHash,
+                  receiptId: profileNft.receiptId,
+                  receiptRootHash: profileNft.receiptRootHash,
+                }
+              : { status: profileNft.status === 'failed' ? 'failed' : 'none' },
           },
         };
       }

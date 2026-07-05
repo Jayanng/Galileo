@@ -75,6 +75,10 @@ export interface MintResult {
   txHash: string;
   metadata: NftProfileMetadata;
   rootHash: string | null;
+  /** F5 receipt id; null when Storage receipt emission was disabled or failed. */
+  receiptId: string | null;
+  /** F5 receipt root hash (0G Storage key under `receipt:<id>`). */
+  receiptRootHash: string | null;
 }
 
 /**
@@ -83,12 +87,19 @@ export interface MintResult {
  * 1. Builds the profile metadata JSON
  * 2. Uploads it to 0G Storage (best-effort — falls back to a data URI)
  * 3. Mints the NFT on-chain (operator wallet pays gas)
- * 4. Returns tokenId, txHash, and metadata
+ * 4. Emits an F5 Verified Intent Receipt (`actionType: 'nft_mint'`) capturing
+ *    the on-chain mint + the receipt itself under `receipt:<id>` on 0G Storage.
+ *    The receipt emission is best-effort: it never blocks the on-chain mint
+ *    and never causes a wallet-creation failure.
+ * 5. Returns tokenId, txHash, metadata, and (when available) the F5 receipt id
+ *    + storage root hash so callers can render the `/verify/:rootHash` link.
  *
  * Reverts if the user already has a profile NFT.
  */
 export async function mintProfileNft(
   userId: string,
+  walletId: string,
+  walletName: string,
   userAddress: string,
   createdAt: number,
   walletCount: number,
@@ -129,7 +140,33 @@ export async function mintProfileNft(
     `[nft] minted profile NFT tokenId=${tokenId} for user=${userId} address=${userAddress} tx=${txHash}`,
   );
 
-  return { tokenId, txHash, metadata, rootHash };
+  // F5: emit a Verified Intent Receipt capturing this mint. Lazy-import so the
+  // receipts module doesn't have to load on every cold start. Receipt failure
+  // is non-fatal — the on-chain mint has already succeeded.
+  let receiptId: string | null = null;
+  let receiptRootHash: string | null = null;
+  try {
+    const { createNftMintReceipt } = await import('../receipts');
+    const r = await createNftMintReceipt({
+      userId,
+      walletId,
+      walletName,
+      walletAddress: userAddress,
+      tokenId,
+      tokenURI: tokenUri,
+      metadataStorageRootHash: rootHash,
+      txHash,
+    });
+    receiptId = r.receiptId;
+    receiptRootHash = r.rootHash;
+    if (receiptRootHash) {
+      console.log(`[nft] F5 receipt emitted receiptId=${receiptId} rootHash=${receiptRootHash}`);
+    }
+  } catch (e) {
+    console.warn(`[nft] F5 receipt emission failed (non-fatal): ${(e as Error).message}`);
+  }
+
+  return { tokenId, txHash, metadata, rootHash, receiptId, receiptRootHash };
 }
 
 // ─── Query ───────────────────────────────────────────────────────────────

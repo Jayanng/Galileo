@@ -10,6 +10,7 @@ import {
   getWalletSecrets,
   type WalletInfo,
   type WalletSecrets,
+  type ProfileNftStatus,
 } from '../wallet/walletService';
 import { getActiveId, setActiveId } from '../wallet/activeWallet';
 import { naming } from '../wallet/namingState';
@@ -25,6 +26,13 @@ function userIdOf(ctx: Context): string | null {
 }
 
 const NO_WALLETS = "You don't have any wallets yet. Send /wallet to create one.";
+
+// Same chainscan base used by send/swap confirm handlers — kept here so the
+// Agent NFT tx link in the create-wallet caption matches the rest of the bot.
+const EXPLORER_TX = 'https://chainscan-galileo.0g.ai/tx/';
+// Public Proof Center endpoint for the F5 receipt verification link (matches
+// the constants used by send/swap handlers).
+const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
 
 // ── Active wallet ────────────────────────────────────────────────────────────
 
@@ -119,7 +127,8 @@ function savedKeyboard(walletId: string): InlineKeyboard {
   return new InlineKeyboard().text("✅ I've saved my private key", `saved:${walletId}`);
 }
 
-function secretCaption(s: WalletSecrets): string {
+function secretCaption(s: WalletSecrets, profileNft?: ProfileNftStatus): string {
+  const nftLine = formatNftLine(profileNft);
   return [
     `🔐 *${s.name}*`,
     '',
@@ -128,20 +137,49 @@ function secretCaption(s: WalletSecrets): string {
     '',
     '🔑 *Private key*',
     `\`${s.privateKey}\``,
+    ...(nftLine ? ['', nftLine] : []),
     '',
     '⚠️ Anyone with your private key controls this wallet. Save it somewhere safe and never share it.',
     'Tap the button below once you have saved it.',
   ].join('\n');
 }
 
+/**
+ * Build the Agent NFT line that appears in the create-wallet caption.
+ *
+ * Returns the empty string for statuses that should not be surfaced
+ * (already_held, skipped) so the caller can omit the block entirely.
+ */
+function formatNftLine(profileNft: ProfileNftStatus | undefined): string {
+  if (!profileNft) return '';
+  switch (profileNft.status) {
+    case 'minted': {
+      // Truncated chainscan link — matches send/swap confirm handlers.
+      const short = `${profileNft.txHash.slice(0, 12)}…`;
+      let line = `🪪 *Agent NFT minted*\nTx: [${short}](${EXPLORER_TX}${profileNft.txHash})`;
+      if (profileNft.receiptRootHash) {
+        const rhShort = `${profileNft.receiptRootHash.slice(2, 12)}…`;
+        line += `\n🧾 Receipt: [0x${rhShort}](${PROOF_VERIFY_URL}${profileNft.receiptRootHash})`;
+      }
+      return line;
+    }
+    case 'failed':
+      return `⚠️ Agent NFT mint failed: ${profileNft.error}`;
+    case 'already_held':
+    case 'skipped':
+      return '';
+  }
+}
+
 async function sendReveal(
   ctx: Context,
   secrets: WalletSecrets,
   revealMethod: 'command_privatekey' | 'button_export' | 'button_new_wallet' | 'command_wallet',
+  profileNft?: ProfileNftStatus,
 ): Promise<void> {
   const png = await addressQr(secrets.address);
   await ctx.replyWithPhoto(new InputFile(png, 'wallet.png'), {
-    caption: secretCaption(secrets),
+    caption: secretCaption(secrets, profileNft),
     parse_mode: 'Markdown',
     reply_markup: savedKeyboard(secrets.id),
   });
@@ -177,14 +215,14 @@ async function createAndReveal(
   trigger: 'command_wallet' | 'button_new_wallet',
 ): Promise<void> {
   await ctx.replyWithChatAction('upload_photo');
-  const wallet = await createWallet(userId);
+  const { wallet, profileNft } = await createWallet(userId);
   await setActiveId(userId, wallet.id);
   const secrets = await getWalletSecrets(userId, wallet.id);
   if (!secrets) {
     await ctx.reply('Wallet created, but I could not read it back. Try /privatekey.');
     return;
   }
-  await sendReveal(ctx, secrets, trigger);
+  await sendReveal(ctx, secrets, trigger, profileNft);
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────

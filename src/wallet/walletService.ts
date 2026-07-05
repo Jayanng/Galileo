@@ -29,6 +29,38 @@ export interface AssetBalance {
   balance: bigint;
 }
 
+/**
+ * Status of the profile-NFT auto-mint that runs on first wallet creation.
+ *
+ * - minted       — first wallet ever, contract configured, mint succeeded.
+ *                  Carries the on-chain tx hash + the F5 receipt id/root hash
+ *                  (both may be null when receipt emission was disabled or
+ *                  failed non-fatally).
+ * - already_held — first wallet ever but the user already owns a profile
+ *                  NFT (e.g. an externally minted one to this address).
+ * - failed       — mint threw (RPC down / contract paused / out of gas).
+ *                  The wallet is still created and usable; the caller may
+ *                  want to surface this to the user.
+ * - skipped      — wallet is not the user's first, OR NFT_CONTRACT_ADDRESS
+ *                  is not configured. Nothing to surface.
+ */
+export type ProfileNftStatus =
+  | {
+      status: 'minted';
+      txHash: string;
+      tokenId: string;
+      receiptId: string | null;
+      receiptRootHash: string | null;
+    }
+  | { status: 'already_held' }
+  | { status: 'failed'; error: string }
+  | { status: 'skipped'; reason: string };
+
+export interface CreateWalletResult {
+  wallet: WalletInfo;
+  profileNft: ProfileNftStatus;
+}
+
 function toInfo(rec: WalletRecord): WalletInfo {
   return { id: rec.id, name: rec.name, address: rec.address, createdAt: rec.createdAt };
 }
@@ -39,7 +71,7 @@ function toInfo(rec: WalletRecord): WalletInfo {
  * the caller can rename it afterwards. The private key and seed phrase are encrypted
  * before they're stored.
  */
-export async function createWallet(userId: string, name?: string): Promise<WalletInfo> {
+export async function createWallet(userId: string, name?: string): Promise<CreateWalletResult> {
   const count = (await walletStore.list(userId)).length;
   const wallet = Wallet.createRandom();
   const rec: WalletRecord = {
@@ -57,16 +89,41 @@ export async function createWallet(userId: string, name?: string): Promise<Walle
   await walletStore.add(userId, rec);
 
   // Auto-mint profile NFT on very first wallet creation (one per user, soulbound).
-  // Best-effort — if it fails, the wallet is still created and usable.
+  // The result is surfaced so chat handlers can render the Agent NFT tx line in
+  // the create-wallet caption. Best-effort — a failure does not block wallet
+  // creation.
+  let profileNft: ProfileNftStatus = { status: 'skipped', reason: 'not_first_wallet' };
   if (count === 0) {
     try {
-      const { hasProfileNft, mintProfileNft } = await import('../og/nftService');
-      const alreadyHas = await hasProfileNft(wallet.address);
-      if (!alreadyHas) {
-        await mintProfileNft(userId, wallet.address, rec.createdAt, 1);
+      const { hasProfileNft, mintProfileNft, nftConfigured } = await import('../og/nftService');
+      if (!nftConfigured()) {
+        profileNft = { status: 'skipped', reason: 'nft_not_configured' };
+      } else {
+        const alreadyHas = await hasProfileNft(wallet.address);
+        if (alreadyHas) {
+          profileNft = { status: 'already_held' };
+        } else {
+          const result = await mintProfileNft(
+            userId,
+            rec.id,
+            rec.name,
+            wallet.address,
+            rec.createdAt,
+            1,
+          );
+          profileNft = {
+            status: 'minted',
+            txHash: result.txHash,
+            tokenId: result.tokenId,
+            receiptId: result.receiptId,
+            receiptRootHash: result.receiptRootHash,
+          };
+        }
       }
     } catch (e) {
-      console.warn(`[wallet] profile NFT auto-mint skipped: ${(e as Error).message}`);
+      const msg = (e as Error).message;
+      console.warn(`[wallet] profile NFT auto-mint failed: ${msg}`);
+      profileNft = { status: 'failed', error: msg };
     }
   }
 
@@ -78,7 +135,7 @@ export async function createWallet(userId: string, name?: string): Promise<Walle
       console.warn(`[wallet] gas drip to ${wallet.address} failed:`, (e as Error).message);
     }
   }
-  return toInfo(rec);
+  return { wallet: toInfo(rec), profileNft };
 }
 
 export async function listWallets(userId: string): Promise<WalletInfo[]> {

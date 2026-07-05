@@ -39,6 +39,7 @@ import {
   type DcaReceipt,
   type IntentReceipt,
   type KeyRevealReceipt,
+  type NftMintReceipt,
   type RiskCheck,
   type SendReceipt,
   type SwapReceipt,
@@ -623,6 +624,68 @@ export async function createKeyRevealReceipt(input: KeyRevealInput): Promise<Cre
 export interface FinalizeResult {
   receipt: IntentReceipt;
   rootHash: string | null;
+}
+
+// ─── NFT mint receipt (create-and-upload in one shot — no staging) ──────────────────
+//
+// Like DCA/alert creation, the NFT mint happens automatically — there is no
+// explicit user Confirm button. The factory fully constructs the receipt and
+// uploads via emitReceipt(), which routes through the same uploadJson queue as
+// every other 0G Storage write (so the operator wallet's nonce is serialized).
+export interface CreateNftMintInput {
+  userId: string;
+  walletId: string;
+  walletName: string;
+  walletAddress: string;
+  tokenId: string;
+  tokenURI: string;
+  metadataStorageRootHash?: string | null;
+  txHash: string;
+}
+
+export async function createNftMintReceipt(input: CreateNftMintInput): Promise<CreateResult> {
+  const receiptId = randomUUID();
+  const now = Date.now();
+  const checks: RiskCheck[] = [
+    { check: 'wallet_first_creation', status: 'pass', ts: now },
+    { check: 'no_existing_profile', status: 'pass', ts: now },
+    {
+      check: 'metadata_uploaded',
+      status: input.metadataStorageRootHash ? 'pass' : 'n/a',
+      ts: now,
+    },
+  ];
+  const receipt: NftMintReceipt = {
+    version: RECEIPT_VERSION,
+    receiptId,
+    actionType: 'nft_mint',
+    userId: input.userId,
+    status: 'minted',
+    createdAt: now,
+    finalizedAt: now,
+    userIntent: {
+      raw: `mint profile NFT for ${input.walletName} (${input.walletAddress.slice(0, 8)}…)`,
+      source: 'automatic',
+    },
+    parsedIntent: {
+      type: 'nft_mint',
+      walletId: input.walletId,
+      walletName: input.walletName,
+      walletAddress: input.walletAddress,
+      tokenId: input.tokenId,
+      tokenURI: input.tokenURI,
+      metadataStorageRootHash: input.metadataStorageRootHash ?? undefined,
+    },
+    riskChecks: checks,
+    compute: null,
+    confirmation: {
+      required: false,
+      method: 'automatic',
+    },
+    chain: { txHash: input.txHash },
+    storage: {},
+  };
+  return emitReceipt(receipt);
 }
 
 /**

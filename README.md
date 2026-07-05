@@ -315,7 +315,7 @@ first wallet creation. Non-transferable, on-chain proof of agent-hood.
 - **0G Storage** — metadata JSON lives on decentralized storage (`0g://<rootHash>`)
 - **Tools** — `get_profile_nft` views your badge, `get_leaderboard` shows total community size
 
-Contract: `GalileoProfileNFT` on 0G Galileo at `0xb18937EBc2361D1734339c8c68dFFcA9f4ED6e86`.
+Contract: `GalileoProfileNFT` on 0G Galileo at ``.
 
 ### 🌿 Self-Healing In-Memory Registry
 

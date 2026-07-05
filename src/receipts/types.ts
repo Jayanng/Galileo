@@ -44,6 +44,8 @@ export const RiskCheckSchema = z.object({
     'notification_sent',
     // Key reveal
     'no_ai_access',
+    // NFT mint
+    'wallet_first_creation', 'no_existing_profile', 'metadata_uploaded',
   ]),
   status: z.enum(['pass', 'fail', 'pending', 'n/a']),
   ts: z.number().int().nonnegative(),
@@ -65,7 +67,13 @@ export type UserIntent = z.infer<typeof UserIntentSchema>;
 
 export const ConfirmationSchema = z.object({
   required: z.boolean(),
-  method: z.enum(['telegram_inline_button', 'implicit_schedule', 'automatic_scheduled']),
+  method: z.enum([
+    'telegram_inline_button',
+    'implicit_schedule',
+    'automatic_scheduled',
+    // NFT mint (and any other zero-touch automatic action)
+    'automatic',
+  ]),
   confirmedAt: z.number().int().nonnegative().optional(),
 });
 export type Confirmation = z.infer<typeof ConfirmationSchema>;
@@ -268,6 +276,51 @@ export const KeyRevealReceiptSchema = z.object({
 });
 export type KeyRevealReceipt = z.infer<typeof KeyRevealReceiptSchema>;
 
+// NFT mint receipt ────────────────────────────────────────────────────────────
+//
+// Emitted by `createNftMintReceipt` after the on-chain `mint()` confirms during
+// a user's first wallet creation. Proves that the bot minted a GalileoProfileNFT
+// to a specific wallet address on a specific tx, and (separately) where the NFT
+// metadata JSON lives. The receipt itself lives on 0G Storage under its own
+// `receipt:<id>` key, recoverable from `/verify/:rootHash`.
+//
+// The mint is automatic (no separate user confirmation step), so
+// `confirmation.method` is `'automatic'` and `required` is false. Compute leg
+// is null because wallet creation does not route through the AI agent — neither
+// the `create_wallet` AI tool path nor the NFT mint touch 0G Compute.
+
+export const NftMintParsedIntentSchema = z.object({
+  type: z.literal('nft_mint'),
+  walletId: z.string(),
+  walletName: z.string(),
+  walletAddress: z.string(),
+  tokenId: z.string(),
+  // '0g://<rootHash>' when metadata was uploaded to 0G Storage; otherwise the
+  // data URI used as fallback. The full metadata JSON is also carried.
+  tokenURI: z.string(),
+  metadataStorageRootHash: z.string().optional(),
+});
+export type NftMintParsedIntent = z.infer<typeof NftMintParsedIntentSchema>;
+
+export const NftMintReceiptSchema = z.object({
+  version: z.literal(RECEIPT_VERSION),
+  receiptId: z.string().min(1),
+  actionType: z.literal('nft_mint'),
+  userId: z.string().min(1),
+  status: z.literal('minted'),
+  createdAt: z.number().int().nonnegative(),
+  finalizedAt: z.number().int().nonnegative().optional(),
+
+  userIntent: UserIntentSchema,
+  parsedIntent: NftMintParsedIntentSchema,
+  riskChecks: z.array(RiskCheckSchema),
+  compute: ComputeLegSchema.nullable(),
+  confirmation: ConfirmationSchema,
+  chain: z.object({ txHash: z.string().optional() }),
+  storage: z.object({ rootHash: z.string().optional() }),
+});
+export type NftMintReceipt = z.infer<typeof NftMintReceiptSchema>;
+
 // ─── Union ──────────────────────────────────────────────────────────────────
 
 export type IntentReceipt =
@@ -275,12 +328,13 @@ export type IntentReceipt =
   | SwapReceipt
   | DcaReceipt
   | AlertReceipt
-  | KeyRevealReceipt;
+  | KeyRevealReceipt
+  | NftMintReceipt;
 export type ActionType = IntentReceipt['actionType'];
 export type ReceiptStatus = IntentReceipt['status'];
 
 const RECEIPT_ACTION_TYPES = new Set([
-  'send', 'swap', 'dca', 'alert', 'key_reveal',
+  'send', 'swap', 'dca', 'alert', 'key_reveal', 'nft_mint',
 ]);
 
 /** True when a parsed JSON object looks like a Galileo receipt artifact. */

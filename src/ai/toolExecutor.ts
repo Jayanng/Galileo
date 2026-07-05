@@ -9,6 +9,7 @@ import {
   deleteWallet,
   getOnChainTxCount,
 } from '../wallet/walletService';
+import type { WalletInfo } from '../wallet/walletService';
 import { formatOG } from '../og/chain';
 import { search, getRecentProofs, transactionStats } from './memory';
 import { buildPortfolio } from '../og/portfolio';
@@ -777,6 +778,80 @@ export async function executeTool(
               neverEndorse:
                 "Explaining a transaction is NOT an endorsement of it. Surface the raw from/to/value as facts, but the user must still verify on a block explorer before deciding anything. If a tx sends funds to an address you don't recognise, say so plainly, do NOT reassure the user.",
             },
+          },
+        };
+      }
+
+      case 'get_profile_nft': {
+        const { getProfileNft, nftConfigured } = await import('../og/nftService');
+        if (!nftConfigured()) {
+          return {
+            success: true,
+            data: {
+              exists: false,
+              reason: 'Profile NFTs are not yet deployed on this bot instance. The operator needs to deploy the GalileoProfileNFT contract and set NFT_CONTRACT_ADDRESS.',
+            },
+          };
+        }
+
+        // Resolve wallet: explicit ID → active → first wallet
+        let walletInfo: WalletInfo | null = null;
+        const explicitId = typeof args.walletId === 'string' ? args.walletId : undefined;
+        if (explicitId) {
+          walletInfo = await getWallet(userId, explicitId);
+        } else {
+          const activeId = await getActiveId(userId);
+          const wallets = await listWallets(userId);
+          walletInfo = wallets.find((w) => w.id === activeId) ?? wallets[0] ?? null;
+        }
+        if (!walletInfo) {
+          return { success: false, error: 'No wallet found. Create one first.' };
+        }
+
+        const detail = await getProfileNft(walletInfo.address);
+        if (!detail) {
+          return {
+            success: true,
+            data: {
+              exists: false,
+              wallet: walletInfo.name,
+              address: walletInfo.address,
+              hint: 'No profile NFT yet. It is minted automatically when you create your first wallet — try creating a new wallet.',
+            },
+          };
+        }
+
+        return {
+          success: true,
+          data: {
+            exists: true,
+            tokenId: detail.tokenId,
+            name: detail.name,
+            symbol: detail.symbol,
+            totalSupply: detail.totalSupply,
+            owner: detail.owner,
+            metadata: detail.metadata,
+          },
+        };
+      }
+
+      case 'get_leaderboard': {
+        const { getTotalProfiles, nftConfigured } = await import('../og/nftService');
+        if (!nftConfigured()) {
+          return {
+            success: true,
+            data: { totalProfiles: 0, note: 'NFT contract not deployed.' },
+          };
+        }
+        const total = await getTotalProfiles();
+        const wallets = await listWallets(userId);
+        const walletCount = wallets.length;
+        return {
+          success: true,
+          data: {
+            totalProfiles: total,
+            note: 'Every Galileo agent with a wallet has a soulbound profile NFT.',
+            yourWalletCount: walletCount,
           },
         };
       }

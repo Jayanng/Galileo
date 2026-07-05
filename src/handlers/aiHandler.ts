@@ -24,6 +24,19 @@ import type { StoredMessage, StoredToolCall, StoredTx, SearchEntry } from '../ai
  */
 
 const MAX_CACHED = 20;
+
+/**
+ * How many recent history turns to actually send to the LLM per request.
+ *
+ * The full 20-message cache is retained for continuity, but resending all of
+ * it on EVERY agent iteration (up to MAX_ITERATIONS) is the main driver of
+ * token burn — and the 0G Compute free tier caps at 2000 tokens/min. The
+ * model still has the injected `memoryContext` summary plus the
+ * `search_history` tool for anything older, so trimming the raw transcript
+ * here trades little quality for a large reduction in tokens/min.
+ */
+const HISTORY_FOR_LLM = 6;
+
 const histories = new Map<string, ChatMessage[]>();
 
 function getHistory(userId: string): ChatMessage[] {
@@ -224,18 +237,20 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
   const loadingMsg = await ctx.reply('📖 Loading your history...').catch(() => null);
   await ctx.replyWithChatAction('typing');
 
+  let history: ChatMessage[] = [];
+  let memoryContext: string | undefined;
+
   try {
     // ── Step 1: Load conversation history (from cache or 0G Storage) ──
     // This populates the memory.ts cache so subsequent search() is instant.
     // (The loading message is already '📖 Loading your history...' from above)
     await ctx.replyWithChatAction('typing');
-    const history = await loadHistory(userId);
+    history = await loadHistory(userId);
 
     // ── Step 2: Build memory context BEFORE recording the user's message ──
     // (The '🤖 Asking your AI agent...' edit is done before runAgent below)
     await ctx.replyWithChatAction('typing');
 
-    let memoryContext: string | undefined;
     try {
       const wide = await search(userId, undefined, undefined, undefined, 50);
       const filtered = wide.filter((e: SearchEntry) => {
@@ -268,10 +283,15 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     }
     await ctx.replyWithChatAction('typing');
 
+    // Send only the most recent turns to the LLM to keep per-request token
+    // usage bounded (see HISTORY_FOR_LLM). Full history stays in cache + 0G
+    // Storage and remains reachable via the search_history tool.
+    const historyForLlm = history.slice(-HISTORY_FOR_LLM);
+
     const { reply, iterations, status, verified, chatID, providerAddress } = await runAgent(
       userId,
       text,
-      history,
+      historyForLlm,
       undefined,
       memoryContext,
     );
@@ -326,15 +346,129 @@ export async function handleAiMessage(ctx: Context): Promise<void> {
     ]);
   } catch (e) {
     console.error('[aiHandler] agent run failed:', e);
+
+    const msg = (e as Error).message ?? '';
+    const isRateLimit = /429|too many requests|rate.?limit/i.test(msg);
+
+    // ── 429 handling: retry with backoff, then queue ──
+    if (isRateLimit) {
+      const waitMatch = msg.match(/wait\s+(\d+)\s+seconds/i);
+      const waitSec = waitMatch ? parseInt(waitMatch[1]!, 10) : 5;
+      const maxRetries = 3;
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const delay = Math.max(waitSec, Math.pow(2, attempt)) * 1000;
+        console.log(
+          `[aiHandler] rate limited — retry ${attempt + 1}/${maxRetries} in ${Math.round(delay / 1000)}s`,
+        );
+
+        if (loadingMsg) {
+          await ctx.api.editMessageText(
+            ctx.chat!.id,
+            loadingMsg.message_id,
+            `⏳ Rate limited — retrying in ${Math.round(delay / 1000)}s...`,
+          ).catch(() => {});
+        }
+
+        await new Promise((r) => setTimeout(r, delay));
+        await ctx.replyWithChatAction('typing');
+
+        try {
+          // Re-run the agent with the same inputs
+          const historyForLlm = history.slice(-HISTORY_FOR_LLM);
+          const retryResult = await runAgent(
+            userId,
+            text,
+            historyForLlm,
+            undefined,
+            memoryContext,
+          );
+
+          if (loadingMsg) {
+            ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
+          }
+
+          const retryFooter = buildTeeFooter({
+            verified: retryResult.verified,
+            chatID: retryResult.chatID,
+            providerAddress: retryResult.providerAddress,
+          });
+          const retryReply = retryFooter ? `${retryResult.reply}\n\n${retryFooter}` : retryResult.reply;
+
+          if (!config.OG_COMPUTE_FALLBACK) {
+            recordProof(userId, {
+              chatID: retryResult.chatID ?? '',
+              providerAddress: retryResult.providerAddress ?? '',
+              verified: retryResult.verified,
+            }).catch(() => {});
+          }
+
+          const retryParts = splitLongMessage(retryReply);
+          const retrySwapKb = pendingSwaps.get(userId) ? swapConfirmKeyboard() : undefined;
+          for (let j = 0; j < retryParts.length; j++) {
+            await ctx.reply(retryParts[j], {
+              parse_mode: 'Markdown',
+              reply_markup: j === retryParts.length - 1 ? retrySwapKb : undefined,
+            });
+          }
+
+          recordMessage(userId, 'assistant', retryResult.reply).catch(() => {});
+          setHistory(userId, [
+            ...history,
+            { role: 'user', content: text },
+            { role: 'assistant', content: retryResult.reply },
+          ]);
+          return; // success after retry
+        } catch (retryErr) {
+          const retryMsg = (retryErr as Error).message ?? '';
+          const stillRateLimited = /429|too many requests|rate.?limit/i.test(retryMsg);
+          if (!stillRateLimited) {
+            // Non-rate-limit error during retry — surface it
+            if (loadingMsg) {
+              ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
+            }
+            await ctx.reply(
+              `⚠️ I had trouble processing that.\n\nError: ${retryMsg}\n\nIf the problem persists, use /help to see commands that work without AI.`,
+              { reply_markup: new InlineKeyboard().text('❓ Help', 'home:help') },
+            );
+            return;
+          }
+          // Still rate limited — continue the retry loop
+          console.warn(`[aiHandler] retry ${attempt + 1} still rate limited`);
+        }
+      }
+
+      // All retries exhausted — show the user-friendly rate limit message
+      if (loadingMsg) {
+        ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
+      }
+      const waitHint = waitMatch ? ` (about ${waitSec} seconds)` : ' a few seconds';
+      await ctx.reply(
+        [
+          '⏳ I\'m a bit busy right now and hit my usage limit.',
+          '',
+          `Please try again in${waitHint}.`,
+          '',
+          'Tip: commands like /wallet, /balance, /send and /portfolio work instantly without waiting.',
+        ].join('\n'),
+        {
+          reply_markup: new InlineKeyboard().text('❓ Help', 'home:help'),
+        },
+      );
+      return;
+    }
+
+    // Non-rate-limit error — show immediately
     // Delete loading message if it exists
     if (loadingMsg) {
       ctx.api.deleteMessage(ctx.chat!.id, loadingMsg.message_id).catch(() => {});
     }
+
     await ctx.reply(
       [
         '⚠️ I had trouble processing that.',
         '',
-        `Error: ${(e as Error).message}`,
+        `Error: ${msg}`,
         '',
         'If the problem persists, use /help to see commands that work without AI.',
       ].join('\n'),

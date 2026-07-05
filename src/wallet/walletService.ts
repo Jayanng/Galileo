@@ -56,6 +56,20 @@ export async function createWallet(userId: string, name?: string): Promise<Walle
   };
   await walletStore.add(userId, rec);
 
+  // Auto-mint profile NFT on very first wallet creation (one per user, soulbound).
+  // Best-effort — if it fails, the wallet is still created and usable.
+  if (count === 0) {
+    try {
+      const { hasProfileNft, mintProfileNft } = await import('../og/nftService');
+      const alreadyHas = await hasProfileNft(wallet.address);
+      if (!alreadyHas) {
+        await mintProfileNft(userId, wallet.address, rec.createdAt, 1);
+      }
+    } catch (e) {
+      console.warn(`[wallet] profile NFT auto-mint skipped: ${(e as Error).message}`);
+    }
+  }
+
   if (config.WALLET_GAS_DRIP !== '0' && Number(config.WALLET_GAS_DRIP) > 0) {
     try {
       const tx = await dripGas(wallet.address, config.WALLET_GAS_DRIP);

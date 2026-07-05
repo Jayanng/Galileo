@@ -479,6 +479,36 @@ export const toolDefinitions: ChatTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_profile_nft',
+      description:
+        'View your Galileo agent profile NFT. Shows token ID, mint date, wallet count, attributes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          walletId: {
+            type: 'string',
+            description: 'Optional wallet ID (defaults to active wallet).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_leaderboard',
+      description: 'How many agent profile NFTs exist — shows your rank in the Galileo community.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ];
 
 /**

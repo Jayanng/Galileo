@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+dotenv.config();
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
@@ -93,6 +93,11 @@ const schema = z.object({
   USDT_ADDRESS: z.string().default(''),
   SWAP_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(5000).default(50),
   SWAP_DEADLINE_SECS: z.coerce.number().int().positive().default(600),
+
+  // Profile NFT — soulbound ERC-721 identity badge per user.
+  // Deploy via scripts/deployNft.mjs and set the printed address here.
+  // Leave blank to disable NFT minting (bot works fine without it).
+  NFT_CONTRACT_ADDRESS: z.string().default(''),
 });
 
 export type AppConfig = z.infer<typeof schema>;

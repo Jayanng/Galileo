@@ -7,11 +7,15 @@ import { recordToolCall } from './memory';
 /**
  * Maximum number of LLM round-trips per user message.
  *
- * Each iteration = one chat completion call. If the LLM keeps requesting
- * tools without producing a final answer, we bail out after this many
- * iterations and return a graceful fallback.
+ * Each iteration = one chat completion call that resends the (growing)
+ * conversation, so every extra iteration is a full prompt's worth of tokens.
+ * On the 0G Compute free tier (2000 tokens/min) a high cap makes a single
+ * multi-step message blow the per-minute budget and trigger 429s. 3 covers
+ * the common flows (e.g. list_wallets → get_balance → final answer) while
+ * keeping worst-case token burn bounded. If the LLM keeps requesting tools
+ * past this, we bail out with a graceful fallback.
  */
-const MAX_ITERATIONS = 5;
+const MAX_ITERATIONS = 3;
 
 export interface AgentRunResult {
   /** Final text reply to send back to the user. */

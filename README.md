@@ -118,6 +118,8 @@ and 7+ more languages):
 ### 👛 Multi-Wallet Management — Your Wallets, Your Way
 
 - Create multiple named wallets per user
+- Import an existing wallet via private key (`/import`) — validated, previewed, and
+  Confirm-gated; the key never touches the LLM or memory
 - View addresses with QR codes
 - Check OG + WOG + USDC + USDT balances
 - Rename wallets anytime
@@ -178,6 +180,19 @@ send `/proof` to see the last 10.
 - Operator wallet handles gas and storage writes
 - Per-user wallets are independently generated
 
+### 🎨 Profile NFT — Soulbound Identity
+
+Every Galileo user gets a **soulbound ERC-721 profile NFT** minted automatically on their
+first wallet creation. Non-transferable, on-chain proof of agent-hood.
+
+- **One per user** — minted to the first wallet address, `GALPRO` symbol
+- **Auto-mint** — zero user action required; the bot pays gas
+- **Metadata** — creation date, wallet count, chain ID, anonymized user hash
+- **0G Storage** — metadata JSON lives on decentralized storage (`0g://<rootHash>`)
+- **Tools** — `get_profile_nft` views your badge, `get_leaderboard` shows total community size
+
+Contract: `GalileoProfileNFT` on 0G Galileo at `0xb18937EBc2361D1734339c8c68dFFcA9f4ED6e86`.
+
 ### 🌿 Self-Healing In-Memory Registry
 
 The Telegram `@username → userId` registry lives in process memory as the **single source
@@ -201,15 +216,24 @@ for the layered architecture diagram and design rationale.
 
 ### 🤖 AI Tools (the depth under the hood)
 
-The agent exposes **15 LLM-callable tools** in `src/ai/tools.ts`. Highlights:
+The agent exposes **26 LLM-callable tools** in `src/ai/tools.ts`, dispatched via
+`src/ai/toolExecutor.ts`. Grouped by area:
 
-- `transaction_stats` — On-chain tx count, breakdown by type, volume per token
-- `get_price_usd` — USD price for any tracked token (OG, WOG, USDC, USDT) or any CoinGecko id
-- `prepare_swap` — Stages a wrap/unwrap or DEX swap; never executes without Confirm
-- `search_history` / `get_recent_proofs` — Memory and TEE-proof retrieval
-- `send_og` / `create_wallet` / `list_wallets` / `rename_wallet` / etc. — Wallet CRUD
-- `dca_create` / `alert_create` / `list_intents` / `cancel_intent` / `pause_intent` /
-  `resume_intent` — Scheduled intents (DCA + alerts)
+- **Wallet CRUD** — `create_wallet`, `list_wallets`, `get_balance`, `get_wallet_address`,
+  `get_wallet_details`, `get_wallet_timeline`, `get_total_og`, `rename_wallet`, `delete_wallet`
+- **Secrets** — `reveal_private_key`, `reveal_recovery_phrase` (BIP-39 seed; only for
+  wallets created in-app, not imported)
+- **Portfolio + pricing** — `get_portfolio`, `get_price`, `transaction_stats`
+- **Memory + proofs** — `search_history`, `get_proofs`
+- **Scheduled intents** — `dca_create`, `alert_create`, `list_intents`, `manage_intent`
+  (one tool handling `cancel` / `pause` / `resume`)
+- **Swaps** — `swap` (stages a wrap/unwrap or DEX swap; never executes without Confirm)
+- **On-chain explainers (read-only)** — `explain_contract`, `explain_transaction`
+- **Profile NFT** — `get_profile_nft` (view your soulbound badge), `get_leaderboard` (community size)
+
+> **Note:** sending funds and importing wallets are **not** AI tools. Both run through
+> deterministic command + Confirm-button flows (`/send`, `/import`) so private keys never
+> enter conversation history or 0G Storage memory snapshots.
 
 ---
 
@@ -397,11 +421,12 @@ For deep reference material, the docs are one click away:
 
 ```
 src/
-├── index.ts                  # Entry point: load config, start bot
+├── index.ts                  # Entry point: config, hydrate username index, compute broker, health server, intents worker, start bot
 ├── config.ts                 # Zod-validated environment config
 ├── bot.ts                    # grammY bot setup + routing
 ├── health.ts                 # /health + /proofs HTTP endpoints
 ├── faq.ts                    # /help FAQ text
+├── helpContent.ts            # Shared /help + onboarding copy
 │
 ├── og/
 │   ├── compute.ts            # 0G Compute Router client (OpenAI-compatible, fallback)
@@ -412,11 +437,14 @@ src/
 │   ├── prices.ts             # CoinGecko USD price feed (60s cache)
 │   ├── dex.ts                # Uniswap-V2 router/factory wrappers
 │   ├── erc20.ts              # ERC-20 helpers (allowance, transfer)
-│   └── wog.ts                # WOG (WETH9 clone) wrap/unwrap helpers
+│   ├── wog.ts                # WOG (WETH9 clone) wrap/unwrap helpers
+│   ├── contractExplorer.ts   # Read-only address inspection (backs explain_contract)
+│   ├── transactionExplorer.ts# Read-only tx-hash inspection (backs explain_transaction)
+│   └── nftService.ts          # Profile NFT mint, query, metadata update (backs get_profile_nft)
 │
 ├── ai/
-│   ├── agent.ts              # Tool-calling agent loop (max 5 iterations)
-│   ├── tools.ts              # Tool definitions (15 tools: create_wallet, list_wallets, send_og, prepare_swap, get_price_usd, transaction_stats, …)
+│   ├── agent.ts              # Tool-calling agent loop (max 3 iterations)
+│   ├── tools.ts              # Tool definitions (26 tools)
 │   ├── toolExecutor.ts       # Dispatches LLM tool calls to services
 │   ├── systemPrompt.ts       # Bot persona, behavior rules, multilingual
 │   ├── memory.ts             # F1: permanent memory (0G Storage snapshots)
@@ -425,29 +453,41 @@ src/
 ├── analytics/
 │   └── snapshot.ts           # Daily portfolio snapshots (local file, /history backend)
 │
+├── intents/                  # Scheduled intents subsystem (DCA + price alerts)
+│   ├── index.ts              # Barrel export
+│   ├── types.ts              # DcaIntent / AlertIntent types
+│   ├── intentStore.ts        # Intent persistence (local + optional 0G Storage)
+│   ├── schedule.ts           # Schedule parsing + next-run computation
+│   ├── executor.ts           # Executes a due DCA / evaluates an alert
+│   └── worker.ts             # 30s polling worker (startIntentWorker)
+│
 ├── handlers/
 │   ├── aiHandler.ts          # Natural language handler (AI agent entry point)
 │   ├── walletHandlers.ts     # Wallet command handlers + quick-action buttons
+│   ├── importHandlers.ts     # /import flow (prompt → preview → Confirm/Cancel)
 │   ├── portfolioHandlers.ts  # /portfolio, /price, /history
 │   ├── proofHandler.ts       # /proof command (recent TEE-verified chats)
 │   ├── swapHandlers.ts       # Swap Confirm/Cancel callbacks
 │   ├── swapUiHandlers.ts     # /swap command + deterministic swap parsing
 │   ├── sendHandlers.ts       # Send Confirm/Cancel callbacks
 │   ├── sendUiHandlers.ts     # /send command + deterministic send parsing
-│   └── sendUiHandlers.test.ts
+│   ├── sendUiHandlers.test.ts
+│   ├── intentHandlers.ts     # /intents Confirm/Cancel/Pause callbacks
+│   └── intentUiHandlers.ts   # /intents, /cancel, /pause command UI
 │
 ├── wallet/
 │   ├── crypto.ts             # AES-256-GCM encrypt/decrypt
 │   ├── crypto.test.ts        # Crypto unit test
 │   ├── walletStore.ts        # Local + 0G-backed encrypted persistence
-│   ├── walletService.ts      # Wallet generation, balance, rename, send, swap
+│   ├── walletService.ts      # Wallet generation, balance, rename, assets, tx count
+│   ├── import.ts             # Import-by-private-key: state, validation, service
 │   ├── activeWallet.ts       # Active-wallet selection per user
 │   ├── namingState.ts        # Wallet naming flow state management
 │   ├── swapState.ts          # Per-user swap-amount waiting state
 │   ├── sendState.ts          # Per-user send-amount waiting state
 │   ├── recipientResolver.ts  # @handle / 0x... → wallet address resolution
 │   ├── recipientResolver.test.ts
-│   ├── usernameIndex.ts      # @handle → userId index (in-memory)
+│   ├── usernameIndex.ts      # @handle → userId index (in-memory + optional 0G)
 │   └── usernameIndex.test.ts
 │
 ├── swap/
@@ -460,6 +500,12 @@ src/
 │
 └── util/
     └── qr.ts                 # Address → QR PNG generator
+
+contracts/
+└── GalileoProfileNFT.sol     # Soulbound ERC-721 profile NFT
+
+scripts/
+└── deployNft.mjs             # One-shot GalileoProfileNFT deployer
 ```
 
 ---
@@ -477,9 +523,12 @@ src/
 | **F5** Verifiable AI Receipts | ⏳ Planned |
 | **F6** Smart Link / Action Generator | ⏳ Planned |
 | **DEX** Demo Uniswap-V2 + mock USDC/USDT on 0G Galileo | ✅ Complete |
+| **Wallet Import** Bring an existing wallet via private key (`/import`, Confirm-gated) | ✅ Complete |
+| **On-Chain Explainers** `explain_contract` + `explain_transaction` read-only lookups | ✅ Complete |
 | **Username Registry Persistence** | ✅ Complete (in-memory + optional 0G Storage layer, gated by `OG_STORAGE_ENABLED`) |
 | **Scheduled Intents** DCA + price alerts via polling worker | ✅ Complete (`/intents`, `/cancel`, `/pause` + 6 AI tools; ticks every 30s, survives restarts via 0G Storage) |
 | **Telegram Mini-App Dashboard** — Portfolio, history, proof as embedded WebApp | ⏳ Planned |
+| **Profile NFT** Soulbound ERC-721 per user (`GALPRO`), auto-mint on first wallet | ✅ Complete |
 | **Multi-Agent Sub-Personalities** — Trader/Analyst/Security/Tax modes with auto-routing | ⏳ Planned |
 | **Voice Messages** — Talk instead of typing | ⏳ Planned |
 | **Family & Group Wallets** — Shared wallets for family and groups | ⏳ Planned |

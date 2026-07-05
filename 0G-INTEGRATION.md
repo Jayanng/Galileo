@@ -425,7 +425,7 @@ The bot ships a full portfolio-tracking layer on top of the wallet service. All 
 | `/price <symbol\|coingecko-id>` | `src/handlers/portfolioHandlers.ts` | Quick USD price lookup for any tracked token or arbitrary CoinGecko id. |
 | `/history [day\|week\|month]` | `src/handlers/portfolioHandlers.ts` | Renders a P&L table from the user's daily snapshots; baseline = oldest snapshot in range. |
 
-The same flows are reachable via natural language; the AI agent has dedicated tools (`get_price_usd`, `transaction_stats`) to answer "how much is X?", "how many transactions have I done?", etc.
+The same flows are reachable via natural language; the AI agent has dedicated tools (`get_price`, `transaction_stats`) to answer "how much is X?", "how many transactions have I done?", etc.
 
 ### CoinGecko price feed
 
@@ -463,5 +463,30 @@ Defined in `src/ai/tools.ts`. Returns:
   volumeByUnit: { OG: "1.6", USDC: "200", ... }
 }
 ```
+
+---
+
+## 7. Profile NFT (ERC-721)
+
+| Property | Value | Source |
+|---|---|---|
+| **Contract** | `GalileoProfileNFT` | `contracts/GalileoProfileNFT.sol` |
+| **Address** | `0xb18937EBc2361D1734339c8c68dFFcA9f4ED6e86` | `config.NFT_CONTRACT_ADDRESS` |
+| **Standard** | Soulbound ERC-721 (non-transferable) | — |
+| **Symbol** | `GALPRO` | — |
+| **Deployer** | `scripts/deployNft.mjs` | — |
+
+### Usage in code
+
+```typescript
+// src/og/nftService.ts
+const c = contract(operatorWallet);
+const tx = await c.mint(userAddress, tokenUri);  // operator pays gas
+```
+
+- One NFT per user — minted automatically on first wallet creation (`walletService.ts`)
+- Metadata stored on 0G Storage (when enabled) or base64 data URI on-chain
+- LLM tools: `get_profile_nft` (view your badge), `get_leaderboard` (community size)
+- `updateProfileMetadata()` supports updating the tokenURI for living resume features
 
 Use it whenever the user asks "how many transactions?", "what's my total volume?", or "my activity totals". `onChainTxCount` is a raw number only — it has NO details about destinations, amounts, or wallet names. For per-transaction details, follow up with `search_history`.

@@ -517,6 +517,8 @@ export async function executeTool(
         console.log(`[toolExecutor] dca_create id=${intent.id} ${amount} ${fromToken}\u2192${toToken} ${schedule.raw}`);
         // F5: emit a DCA creation receipt (proves the schedule was set up).
         const walletName = wallets.find((w) => w.id === resolvedWalletId)?.name;
+        let creationReceiptId: string | null = null;
+        let creationReceiptRootHash: string | null = null;
         try {
           const creation = await createDcaCreationReceipt({
             userId,
@@ -528,6 +530,8 @@ export async function executeTool(
             walletName,
             compute: buildComputeLeg(computeContext),
           });
+          creationReceiptId = creation.receiptId;
+          creationReceiptRootHash = creation.rootHash;
           await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
         } catch (e) {
           console.warn(`[toolExecutor] dca creation receipt failed:`, (e as Error).message);
@@ -541,6 +545,8 @@ export async function executeTool(
             status: intent.status,
             schedule: intent.schedule.raw,
             nextRunAt: new Date(intent.nextRunAt).toISOString(),
+            receiptId: creationReceiptId,
+            receiptRootHash: creationReceiptRootHash,
             note: 'No funds have moved yet \u2014 the worker will execute on the next scheduled tick. Use /intents to manage it.',
           },
         };

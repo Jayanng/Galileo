@@ -5,6 +5,7 @@ import { initializeComputeBroker, getActiveProviderAddress } from './og/computeB
 import { startHealthServer } from './health';
 import * as usernameIndex from './wallet/usernameIndex';
 import { startIntentWorker } from './intents/worker';
+import { flushAllPendingUploads } from './ai/memory';
 
 async function main(): Promise<void> {
   const bot = buildBot();
@@ -63,6 +64,10 @@ async function main(): Promise<void> {
     console.log(`[shutdown] ${signal} received, stopping bot + intents worker...`);
     healthServer.close();
     await Promise.all([bot.stop(), intentWorker.stop()]);
+    // Flush any memory writes sitting in the debounce window before exiting.
+    // Without this, a `fly deploy` would drop the last ~2s of writes. Receipts
+    // are unaffected — they upload immediately (not debounced).
+    await flushAllPendingUploads(4000);
   };
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));

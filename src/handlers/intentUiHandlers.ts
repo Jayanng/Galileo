@@ -2,6 +2,8 @@ import { type Context } from 'grammy';
 import { executeTool } from '../ai/toolExecutor';
 import { isSupportedDcaPath } from '../intents';
 
+const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
+
 /**
  * Deterministic DCA + alert UX — the reliable path to a stored intent.
  *
@@ -69,9 +71,12 @@ export async function stageDca(ctx: Context, userId: string, draft: DcaDraft): P
     await ctx.reply(`⚠️ ${res.error}`);
     return;
   }
-  const data = res.data as { id: string; summary: string; schedule: string; nextRunAt: string };
+  const data = res.data as { id: string; summary: string; schedule: string; nextRunAt: string; receiptId?: string | null; receiptRootHash?: string | null };
+  const receiptLine = data.receiptRootHash
+    ? `\n🧾 Receipt: [0x${data.receiptRootHash.slice(2, 12)}…](${PROOF_VERIFY_URL}${data.receiptRootHash})`
+    : '';
   await ctx.reply(
-    `✅ *DCA scheduled*\n${data.summary}\nRuns every: \`${data.schedule}\`\nNext at: \`${data.nextRunAt}\`\n\nManage: /intents`,
+    `✅ *DCA scheduled*\n${data.summary}\nRuns every: \`${data.schedule}\`\nNext at: \`${data.nextRunAt}\`${receiptLine}\n\nManage: /intents`,
     { parse_mode: 'Markdown' },
   );
 }

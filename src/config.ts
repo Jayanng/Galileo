@@ -73,6 +73,18 @@ const schema = z.object({
   // Set to 0 to disable compaction (not recommended — unbounded growth).
   OG_MEMORY_MAX_ENTRIES: z.coerce.number().int().min(0).default(1000),
 
+  // F1 Upload batching: debounce window for memory snapshot uploads.
+  // Instead of uploading on every record* call (4-5 per user turn), we wait
+  // this many ms after the last write before uploading — collapsing a burst
+  // into a single 0G Storage tx. Only memory snapshots are debounced; F5
+  // receipts upload immediately (their rootHash is surfaced to the user).
+  OG_MEMORY_UPLOAD_DEBOUNCE_MS: z.coerce.number().int().positive().default(2000),
+
+  // F1 Upload batching: max delay before a debounced upload is force-flushed,
+  // even if writes keep coming. Ensures a snapshot eventually persists during
+  // sustained activity. Must be > OG_MEMORY_UPLOAD_DEBOUNCE_MS.
+  OG_MEMORY_UPLOAD_MAX_WAIT_MS: z.coerce.number().int().positive().default(10000),
+
   // F1 File Mode: local cache mapping userId → latest 0G Storage rootHash.
   // When unset, it is derived to sit BESIDE the wallet store (see load() below),
   // so it always lands on the same persistent volume — otherwise a restart wipes

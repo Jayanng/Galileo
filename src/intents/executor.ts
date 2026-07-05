@@ -25,6 +25,9 @@ import { getWallet } from '../wallet/walletService';
 import { recordTx } from '../ai/memory';
 import { createDcaExecutionReceipt, createAlertFireReceipt } from '../receipts';
 
+const EXPLORER_TX = 'https://chainscan-galileo.0g.ai/tx/';
+const PROOF_VERIFY_URL = 'https://galileo-test.fly.dev/verify/';
+
 /** Minimal bot surface used here — keeps tests free of grammY. */
 export interface TelegramBot {
   api: {
@@ -222,23 +225,35 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
   // F5: emit a DCA execution receipt (links back to creation receipt via intentId).
   // blockNumber from the underlying swap tx lets /verify render the on-chain
   // block timestamp alongside the tx hash.
-  createDcaExecutionReceipt({
-    userId: intent.userId,
-    intentId: intent.id,
-    creationReceiptId: intent.creationReceiptId,
-    fromToken: intent.fromToken,
-    toToken: intent.toToken,
-    amount: intent.amount,
-    scheduleRaw: intent.schedule.raw,
-    scheduleIntervalMs: intent.schedule.intervalMs,
-    walletId: intent.walletId,
-    walletName: wallet.name,
-    txHash: result.hash,
-    blockNumber: result.blockNumber,
-  }).catch((e) => console.warn(`[intents] DCA execution receipt failed:`, (e as Error).message));
+  let execReceiptRootHash: string | null = null;
+  try {
+    const execReceipt = await createDcaExecutionReceipt({
+      userId: intent.userId,
+      intentId: intent.id,
+      creationReceiptId: intent.creationReceiptId,
+      fromToken: intent.fromToken,
+      toToken: intent.toToken,
+      amount: intent.amount,
+      scheduleRaw: intent.schedule.raw,
+      scheduleIntervalMs: intent.schedule.intervalMs,
+      walletId: intent.walletId,
+      walletName: wallet.name,
+      txHash: result.hash,
+      blockNumber: result.blockNumber,
+    });
+    execReceiptRootHash = execReceipt.rootHash;
+  } catch (e) {
+    console.warn(`[intents] DCA execution receipt failed:`, (e as Error).message);
+  }
+
+  const txLine = `\nTx: [${result.hash.slice(0, 12)}…](${EXPLORER_TX}${result.hash})`;
+  const receiptLine = execReceiptRootHash
+    ? `\n🧾 Receipt: [0x${execReceiptRootHash.slice(2, 12)}…](${PROOF_VERIFY_URL}${execReceiptRootHash})`
+    : '';
   await bot.api.sendMessage(
     intent.userId,
-    `✅ DCA fired (${intent.schedule.raw}): ${result.summary}\nNext attempt in ${intent.schedule.raw}.`,
+    `✅ DCA fired (${intent.schedule.raw}): ${result.summary}${txLine}${receiptLine}\nNext attempt in ${intent.schedule.raw}.`,
+    { parse_mode: 'Markdown' },
   );
   return {
     intent: {

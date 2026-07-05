@@ -144,18 +144,75 @@ function compact(userId: string, history: HistorySnapshot): void {
 }
 
 /**
- * Save history back to 0G Storage (best-effort).
- * Compacts before uploading so the snapshot size stays bounded.
+ * Save history back to 0G Storage (best-effort, debounced).
+ *
+ * Instead of uploading on every record* call (4-5 per user turn), we debounce:
+ * wait OG_MEMORY_UPLOAD_DEBOUNCE_MS after the last write, then upload once.
+ * If writes keep coming, force-flush after OG_MEMORY_UPLOAD_MAX_WAIT_MS so a
+ * snapshot eventually persists. This collapses a 5-upload burst into 1,
+ * cutting 0G Storage queue depth and per-upload gas cost dramatically.
+ *
+ * Only memory snapshots are debounced. F5 receipts (receiptService.ts) call
+ * fileStorage.uploadJson directly and remain immediate — their rootHash is
+ * surfaced to the user and must be available ASAP.
+ *
+ * The in-memory cache is updated synchronously (in scheduleUpload), so
+ * subsequent reads (getRecent / search / getRecentProofs) see the new entry
+ * immediately — the debounce only delays the 0G Storage persistence, not
+ * what the LLM sees on the next turn.
  */
-async function saveHistory(userId: string, history: HistorySnapshot): Promise<void> {
+const DEBOUNCE_MS = config.OG_MEMORY_UPLOAD_DEBOUNCE_MS;
+const MAX_WAIT_MS = config.OG_MEMORY_UPLOAD_MAX_WAIT_MS;
+
+interface PendingUpload {
+  history: HistorySnapshot;
+  timer: NodeJS.Timeout;
+  firstScheduledAt: number;
+}
+const pendingUploads = new Map<string, PendingUpload>();
+
+function scheduleUpload(userId: string, history: HistorySnapshot): void {
   if (!memoryEnabled()) return;
-  compact(userId, history);
   cache.set(userId, history);
-  try {
-    await uploadJson(userId, history);
-  } catch (e) {
-    console.warn(`[memory] saveHistory failed for user=${userId}:`, (e as Error).message);
+
+  const existing = pendingUploads.get(userId);
+  const now = Date.now();
+
+  if (existing) {
+    // Already a pending upload for this user — just refresh the reference and
+    // reset the debounce timer. Force-flush immediately if we've been waiting
+    // too long (caps worst-case data loss during sustained activity).
+    existing.history = history;
+    clearTimeout(existing.timer);
+    const elapsed = now - existing.firstScheduledAt;
+    const delay = elapsed >= MAX_WAIT_MS ? 0 : DEBOUNCE_MS;
+    existing.timer = setTimeout(() => { void flushUpload(userId); }, delay);
+    return;
   }
+
+  // First write in a burst — schedule a new debounced upload.
+  const entry: PendingUpload = {
+    history,
+    timer: setTimeout(() => { void flushUpload(userId); }, DEBOUNCE_MS),
+    firstScheduledAt: now,
+  };
+  pendingUploads.set(userId, entry);
+}
+
+async function flushUpload(userId: string): Promise<void> {
+  const entry = pendingUploads.get(userId);
+  if (!entry) return;
+  pendingUploads.delete(userId);
+  try {
+    compact(userId, entry.history);
+    await uploadJson(userId, entry.history);
+  } catch (e) {
+    console.warn(`[memory] debounced upload failed for user=${userId}:`, (e as Error).message);
+  }
+}
+
+async function saveHistory(userId: string, history: HistorySnapshot): Promise<void> {
+  scheduleUpload(userId, history);
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -373,8 +430,51 @@ export async function search(
  * but we forget the rootHash, so we can no longer find it.
  */
 export async function clearMemory(userId: string): Promise<void> {
+  // Cancel any pending debounced upload so it doesn't fire after we've cleared
+  // the index and re-upload stale data (which would re-add the rootHash entry).
+  const pending = pendingUploads.get(userId);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingUploads.delete(userId);
+  }
   cache.delete(userId);
   if (memoryEnabled()) {
     await clearIndex(userId);
   }
+}
+
+/**
+ * Flush ALL pending debounced uploads immediately. Called from the graceful
+ * shutdown handler (index.ts) so that a `fly deploy` (SIGTERM) doesn't drop
+ * the last ~2s of writes sitting in the debounce window.
+ *
+ * Race against a hard timeout — a single 0G Storage upload takes 2–5s, and
+ * uploads are serialized through fileStorage's single-operator-wallet queue.
+ * With a 4s cap we typically flush 1–2 uploads; the rest are abandoned (same
+ * data-loss window as today, no regression). If the upload completes within
+ * the cap, zero data is lost.
+ */
+export async function flushAllPendingUploads(timeoutMs: number = 4000): Promise<void> {
+  const userIds = Array.from(pendingUploads.keys());
+  if (userIds.length === 0) return;
+
+  console.log(`[memory] flushing ${userIds.length} pending upload(s) on shutdown...`);
+
+  const flushPromises: Promise<void>[] = [];
+  for (const userId of userIds) {
+    const entry = pendingUploads.get(userId);
+    if (!entry) continue;
+    clearTimeout(entry.timer);
+    flushPromises.push(flushUpload(userId));
+  }
+
+  await Promise.race([
+    Promise.allSettled(flushPromises),
+    new Promise<void>((resolve) =>
+      setTimeout(() => {
+        console.warn(`[memory] shutdown flush timed out after ${timeoutMs}ms — some uploads may be lost`);
+        resolve();
+      }, timeoutMs),
+    ),
+  ]);
 }

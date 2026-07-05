@@ -3,6 +3,10 @@
 # (so uptime monitors and cron pingers have something to hit).
 app = "galileo-test"
 primary_region = "ord"
+# Grace period (seconds) before Fly sends SIGKILL after SIGTERM. The shutdown
+# handler flushes pending 0G Storage uploads (up to 4s) after bot.stop() +
+# intentWorker.stop() resolve, so we need headroom beyond the default 5s.
+kill_timeout = 10
 
 [build]
 

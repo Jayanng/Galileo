@@ -193,3 +193,19 @@ export async function clearIndex(userId: string): Promise<void> {
   rootHashIndex.delete(userId);
   await saveIndex();
 }
+
+/**
+ * Look up data by root hash by searching the local index for a matching
+ * userId entry, then downloading it from 0G Storage.
+ * Returns the raw JSON string or null if no match found.
+ */
+export async function downloadByRootHash(rootHash: string): Promise<string | null> {
+  await loadIndex();
+  for (const [userId, hash] of rootHashIndex.entries()) {
+    if (hash.toLowerCase() === rootHash.toLowerCase()) {
+      const data = await downloadJson<any>(userId);
+      return data ? JSON.stringify(data) : null;
+    }
+  }
+  return null;
+}

@@ -2,20 +2,20 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { proofsPage, verifyPage, statusPage, intentsLivePage } from './proofCenter';
 
 /**
- * Minimal HTTP health endpoint.
+ * HTTP server for health checks and the public Proof Center.
  *
- * The bot is a long-polling worker with no inbound traffic, so this is the only
- * public surface. It exists purely so external uptime monitors (UptimeRobot,
- * Better Stack) and cron pingers (cron-job.org) have a URL to hit.
- *
- *   GET /health  (or /)  -> 200 { status: "ok", uptime }
- *   GET /proofs          -> public/proofs.json
- *   anything else        -> 404
+ *   GET /health              -> 200 { status: "ok", uptime }
+ *   GET /                    -> 200 { status: "ok", uptime }
+ *   GET /proofs              -> Proof Center live feed (HTML)
+ *   GET /verify/:rootHash    -> Receipt verification from 0G Storage
+ *   GET /status              -> Health dashboard (compute, storage, chain)
+ *   GET /intents/live         -> DCA & alert executions with proof links
+ *   anything else            -> 404
  */
 
-// Resolve path to proofs.json relative to this file
 let _proofsPath: string;
 try {
   _proofsPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'proofs.json');
@@ -25,13 +25,37 @@ try {
 
 export function startHealthServer(port: number): Server {
   const server = createServer((req, res) => {
-    if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
+    const url = req.url ?? '/';
+
+    if (req.method === 'GET' && (url === '/health' || url === '/')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok', uptime: Math.round(process.uptime()) }));
       return;
     }
 
-    if (req.method === 'GET' && req.url === '/proofs') {
+    if (req.method === 'GET' && url === '/proofs') {
+      void proofsPage(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && url.startsWith('/verify/')) {
+      const root = url.slice('/verify/'.length).trim() || undefined;
+      void verifyPage(req, res, root);
+      return;
+    }
+
+    if (req.method === 'GET' && url === '/status') {
+      void statusPage(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && url === '/intents/live') {
+      void intentsLivePage(req, res);
+      return;
+    }
+
+    // Legacy JSON proofs endpoint (backward compat)
+    if (req.method === 'GET' && url === '/proofs.json') {
       try {
         if (existsSync(_proofsPath)) {
           const data = readFileSync(_proofsPath, 'utf8');

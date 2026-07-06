@@ -44,7 +44,8 @@ for (const f of files) {
 //   test-verify-        — src/proofCenter.ts rendering
 //   test-receipt-       — src/receipts/* + proofCenter rendering
 //   test-nft-           — NFT metadata endpoint (proofCenter.ts route)
-const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-|test-receipt-|test-nft-)/.test(f);
+//   test-memory-*       — src/ai/memory.ts (coerceSnapshot recovery path)
+const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-|test-receipt-|test-nft-|test-memory-)/.test(f);
   const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
   const tsxPath = join(here, 'node_modules', '.bin', tsxBin);
   const cmd = useTsx ? tsxPath : 'node';

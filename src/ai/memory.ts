@@ -11,8 +11,14 @@
  *   - A local index file (OG_STORAGE_INDEX_PATH) maps userId → latest rootHash.
  *   - If the index is lost, the data is still on 0G (just harder to find).
  *
- * Memory is best-effort: if 0G Storage is unavailable, we log a warning and
- * continue (the bot must never crash due to a memory write failure).
+ * Memory is best-effort: if 0G Storage is unavailable OR returns a malformed
+ * snapshot (e.g. a stale payload from a previous bot version), we log a
+ * warning and continue. The snapshot shape is validated by `coerceSnapshot`
+ * inside `loadHistory`, so every `cache.set` only ever holds a
+ * HistorySnapshot with a real array `entries`. Consequently the four record*
+ * functions cannot throw on a malformed-snapshot regression — the persistent
+ * upload to 0G Storage remains fire-and-forget. The bot must never crash
+ * due to a memory failure.
  */
 
 import { config } from '../config';
@@ -75,8 +81,71 @@ export type SearchEntry = (StoredMessage | StoredToolCall | StoredTx | StoredPro
 // Internal: Snapshot structure stored on 0G
 // ───────────────────────────────────────────────────────────────────────
 
+/**
+ * A user's history snapshot. The only invariant `coerceSnapshot` enforces
+ * is that `entries` is an actual `MemoryEntry[]` — every field inside each
+ * `MemoryEntry` is treated as a trusted runtime value (not schema-validated
+ * on read; the memory is an opaque log, the LLM never consumes it directly).
+ *
+ * Internal-only; not exported (callers interact via the public record* API).
+ */
 interface HistorySnapshot {
   entries: MemoryEntry[];
+}
+
+/**
+ * Coerce an arbitrary value (typically the parsed JSON of a 0G Storage
+ * snapshot) into a HistorySnapshot with a guaranteed-array `entries`.
+ *
+ * Why: a production incident in `recordToolCall` threw
+ *   `TypeError: history.entries.push is not a function`
+ * because a 0G Storage snapshot for one user was shaped differently
+ * (likely a previous bot version wrote `entries` as a Map, a plain object,
+ * undefined, etc.). Without this guard, every subsequent read of that
+ * snapshot re-explodes with the same TypeError until something manually
+ * purges the cache. With this guard, the bad snapshot is normalised to an
+ * empty array and the next write heals the user's memory on 0G (the new
+ * valid snapshot overwrites the stale rootHash in the local index).
+ *
+ * Behaviour:
+ *   - Valid input (object with array `entries`) → returned by reference,
+ *     preserving the cache-internal `cached === cached` invariant.
+ *   - Anything else → logs a single `[memory]` warning and returns a fresh
+ *     `{ entries: [] }`. `coerceSnapshot` never throws.
+ *
+ * Exported so it can be exercised by a unit test without touching 0G.
+ */
+export function coerceSnapshot(raw: unknown, userId: string): HistorySnapshot {
+  if (
+    raw != null &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    Array.isArray((raw as { entries?: unknown }).entries)
+  ) {
+    return raw as HistorySnapshot;
+  }
+  console.warn(
+    `[memory] user=${userId}: snapshot on 0G had invalid shape — ${describe(raw)}; resetting to empty history. ` +
+      `Usually a stale snapshot from a previous bot version. The next write will re-seed a valid snapshot on 0G.`,
+  );
+  return { entries: [] };
+}
+
+function describe(raw: unknown): string {
+  if (raw === null) return 'null';
+  if (raw === undefined) return 'undefined';
+  if (Array.isArray(raw)) return 'an array (missing the { entries: [...] } wrapper)';
+  if (typeof raw !== 'object') return `got a ${typeof raw}`;
+  const entries = (raw as { entries?: unknown }).entries;
+  if (entries === undefined) return "object missing the `.entries` field";
+  return `object with \`.entries\` = ${describeValue(entries)}`;
+}
+
+function describeValue(v: unknown): string {
+  if (v === null) return 'null';
+  if (v === undefined) return 'undefined';
+  if (Array.isArray(v)) return 'an array';
+  return typeof v;
 }
 
 // In-memory cache
@@ -105,7 +174,10 @@ async function loadHistory(userId: string): Promise<HistorySnapshot> {
   const promise = (async () => {
     try {
       const data = await downloadJson<HistorySnapshot>(userId);
-      const snapshot: HistorySnapshot = data || { entries: [] };
+      // coerceSnapshot guarantees `entries` is an array, even if 0G returns
+      // a stale/malformed payload from a previous bot version (see comment
+      // on coerceSnapshot for the production history of this guard).
+      const snapshot = coerceSnapshot(data, userId);
       cache.set(userId, snapshot);
       return snapshot;
     } catch (e) {
@@ -221,6 +293,11 @@ async function saveHistory(userId: string, history: HistorySnapshot): Promise<vo
 
 /**
  * Persist a user or assistant message to 0G Storage.
+ *
+ * Cannot throw in practice: `coerceSnapshot` guarantees `history.entries`
+ * is a real array (the production `push is not a function` failure mode is
+ * impossible), and the 0G Storage write is fire-and-forget. The agent loop
+ * can safely call this without a try/catch wrapper.
  */
 export async function recordMessage(
   userId: string,
@@ -238,6 +315,8 @@ export async function recordMessage(
 
 /**
  * Persist a tool call (the LLM requested a function, we executed it).
+ *
+ * Cannot throw: see recordMessage for the design rationale.
  */
 export async function recordToolCall(
   userId: string,
@@ -256,6 +335,8 @@ export async function recordToolCall(
 
 /**
  * Persist an on-chain transaction (for future use when send_tokens is added).
+ *
+ * Cannot throw: see recordMessage for the design rationale.
  */
 export async function recordTx(
   userId: string,
@@ -324,6 +405,8 @@ export async function transactionStats(
  * Called by `aiHandler` after every final assistant turn. Like the other
  * record* functions, the 0G Storage write is fire-and-forget — the cache is
  * already updated synchronously so subsequent reads see the proof.
+ *
+ * Cannot throw: see recordMessage for the design rationale.
  */
 export async function recordProof(
   userId: string,

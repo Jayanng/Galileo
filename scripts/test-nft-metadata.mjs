@@ -59,6 +59,13 @@ function mockReq(url) {
   return { url };
 }
 
+// ─── CI detection ───────────────────────────────────────────────────────────
+
+const IS_CI = process.env.CI === 'true';
+if (IS_CI) {
+  console.log('  ℹ  Running in CI — skipping live endpoint and network-dependent tests.');
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
 let pass = 0;
@@ -113,20 +120,25 @@ await t('rejects keys with special characters', async () => {
 });
 
 // 3) Valid key format is accepted (may still 404 since key doesn't exist in storage)
-await t('valid key format returns a response (404 if not found, not 400)', async () => {
-  const res = mockRes();
-  await nftMetadataPage(mockReq('/nft-metadata/test-key'), res, 'test-key');
-  // Should be 404 (not found in storage), not 400 (invalid key)
-  assert.equal(res._getStatus(), 404, 'expected 404 (key not in storage, but format valid)');
-  const body = JSON.parse(res._getBody());
-  assert.equal(body.error, 'Metadata not found', 'expected metadata not found');
-});
+// Skip in CI: these call downloadJson which requires network access to the 0G Indexer.
+if (!IS_CI) {
+  await t('valid key format returns a response (404 if not found, not 400)', async () => {
+    const res = mockRes();
+    await nftMetadataPage(mockReq('/nft-metadata/test-key'), res, 'test-key');
+    // Should be 404 (not found in storage), not 400 (invalid key)
+    assert.equal(res._getStatus(), 404, 'expected 404 (key not in storage, but format valid)');
+    const body = JSON.parse(res._getBody());
+    assert.equal(body.error, 'Metadata not found', 'expected metadata not found');
+  });
 
-await t('valid key with hyphens and underscores', async () => {
-  const res = mockRes();
-  await nftMetadataPage(mockReq('/nft-metadata/nft-user_123-abc'), res, 'nft-user_123-abc');
-  assert.equal(res._getStatus(), 404, 'expected 404 (valid format but not in storage)');
-});
+  await t('valid key with hyphens and underscores', async () => {
+    const res = mockRes();
+    await nftMetadataPage(mockReq('/nft-metadata/nft-user_123-abc'), res, 'nft-user_123-abc');
+    assert.equal(res._getStatus(), 404, 'expected 404 (valid format but not in storage)');
+  });
+} else {
+  console.log('  ℹ  Skipping 0G Storage network-dependent valid-key tests (CI).');
+}
 
 // 4) Source code check: verify health.ts route is wired correctly
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -158,45 +170,50 @@ await t('proofCenter.ts exports nftMetadataPage', () => {
 });
 
 // ─── Live endpoint check (Fly deployment) ─────────────────────────────────
+// Skipped in CI since no Fly deployment is available in the CI environment.
 
-console.log('\n🌐 Live endpoint check (Fly.io)\n');
+if (!IS_CI) {
+  console.log('\n🌐 Live endpoint check (Fly.io)\n');
 
-// Try common Fly app names for the Galileo deployment
-const FLY_APPS = [
-  'https://galileo-test.fly.dev',
-  'https://galileo.fly.dev',
-];
+  // Try common Fly app names for the Galileo deployment
+  const FLY_APPS = [
+    'https://galileo-test.fly.dev',
+    'https://galileo.fly.dev',
+  ];
 
-let liveReachable = false;
-for (const baseUrl of FLY_APPS) {
-  const url = `${baseUrl}/nft-metadata/test-key`;
-  try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (resp.status === 404) {
-      const body = await resp.json();
-      await t(`Live Fly endpoint returns 404 for missing key (${baseUrl})`, () => {
-        assert.equal(body.error, 'Metadata not found');
-      });
-      console.log(`  ℹ  Endpoint reachable at ${baseUrl}/nft-metadata/:key`);
-      liveReachable = true;
-      break;
-    } else if (resp.status === 200) {
-      const body = await resp.json();
-      await t(`Live Fly endpoint returns metadata (${baseUrl})`, () => {
-        assert.ok(body.name || body.type, 'expected metadata object');
-      });
-      liveReachable = true;
-      break;
-    } else {
-      console.log(`  ⚠  ${baseUrl}: unexpected status ${resp.status}`);
+  let liveReachable = false;
+  for (const baseUrl of FLY_APPS) {
+    const url = `${baseUrl}/nft-metadata/test-key`;
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (resp.status === 404) {
+        const body = await resp.json();
+        await t(`Live Fly endpoint returns 404 for missing key (${baseUrl})`, () => {
+          assert.equal(body.error, 'Metadata not found');
+        });
+        console.log(`  ℹ  Endpoint reachable at ${baseUrl}/nft-metadata/:key`);
+        liveReachable = true;
+        break;
+      } else if (resp.status === 200) {
+        const body = await resp.json();
+        await t(`Live Fly endpoint returns metadata (${baseUrl})`, () => {
+          assert.ok(body.name || body.type, 'expected metadata object');
+        });
+        liveReachable = true;
+        break;
+      } else {
+        console.log(`  ⚠  ${baseUrl}: unexpected status ${resp.status}`);
+      }
+    } catch (e) {
+      console.log(`  ⚠  ${baseUrl}: not reachable (${e.message})`);
     }
-  } catch (e) {
-    console.log(`  ⚠  ${baseUrl}: not reachable (${e.message})`);
   }
-}
 
-if (!liveReachable) {
-  console.log('  ℹ  No live Fly deployment was reachable. The endpoint will work once deployed.');
+  if (!liveReachable) {
+    console.log('  ℹ  No live Fly deployment was reachable. The endpoint will work once deployed.');
+  }
+} else {
+  console.log('\n  ℹ  Skipping live Fly endpoint check in CI.');
 }
 
 // ─── Summary ──────────────────────────────────────────────────────────────

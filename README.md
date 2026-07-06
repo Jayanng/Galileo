@@ -433,6 +433,12 @@ proof is public.
 
 ---
 
+## ⚠️ Known Limitation
+
+During the testnet phase, users may encounter compute rate limits (~1–2 min cooldown period). This is a temporary constraint tied to the current compute tier (threshold: 2000). Once the project deploys to mainnet, this will be resolved by upgrading to a higher-tier plan with an increased request threshold.
+
+---
+
 ## 🏗 Architecture
 
 ```

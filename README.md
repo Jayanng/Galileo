@@ -46,7 +46,7 @@ Then verify the action yourself, in any browser, by root hash:
 
 ---
 
-[Features](#features) · [Why Galileo](#why-galileo) · [Quick Start](#quick-start) · [Architecture](#architecture) · [0G Integration Reference](0G-INTEGRATION.md) · [Usage Reference](docs/USAGE.md) · [Testing Reference](docs/TESTING.md) · [Deploy Guide](DEPLOY.md) · [Project Structure](#project-structure) · [Roadmap](#roadmap)
+[Features](#-features) · [Why Galileo](#-why-galileo) · [Quick Start](#-quick-start) · [Architecture](#-architecture) · [0G Integration Reference](0G-INTEGRATION.md) · [Usage Reference](docs/USAGE.md) · [Testing Reference](docs/TESTING.md) · [Deploy Guide](DEPLOY.md) · [Project Structure](#-project-structure) · [Roadmap](#-roadmap)
 
 <img src="docs/architecture.svg" alt="Galileo Architecture" width="100%"/>
 
@@ -202,7 +202,7 @@ Set-and-forget money habits, just by talking:
 "alert me if OG drops below $1"          → Telegram ping when price hits
 ```
 
-- **DCA** — *"dca X <from> into <to> every <schedule>"*. Bot's worker ticks every 30s. Each scheduled swap fires automatically and emits a Verified Intent Receipt that links back to the original creation receipt — proving the rule was set up correctly *and* executed exactly as intended. (See [Verifiable DCA on 0G](#verifiable-dca-on-0g) below.)
+- **DCA** — *"dca X <from> into <to> every <schedule>"*. Bot's worker ticks every 30s. Each scheduled swap fires automatically and emits a Verified Intent Receipt that links back to the original creation receipt — proving the rule was set up correctly *and* executed exactly as intended. (See [Verifiable DCA on 0G](#-verifiable-dca-on-0g) below.)
 - **Scheduled Sends** — *"send X OG to <recipient> every <schedule>"* or *"recurring send X OG to <recipient> <schedule>"*. Recurring transfers that fire on schedule, with execution receipts for every automated payment. Recipients can be `@username` or `0x…` addresses.
 - **Alerts** — *"alert me if <symbol> goes <operator> <price>"*. Fires once when met.
 - **Manage** — `/intents`, `/cancel`, `/pause` with inline buttons. 
@@ -494,7 +494,7 @@ proof is public.
 ### Data Flow
 
 The agent loop below is the **read path** (memory, balance, portfolio, explainers). The
-**write path** for any action that moves value follows the [Verifiable Intent Pipeline](#-the-verifiable-int-pipeline) instead — it stages a receipt, requires a Confirm tap,
+**write path** for any action that moves value follows the [Verifiable Intent Pipeline](#-the-verifiable-intent-pipeline) instead — it stages a receipt, requires a Confirm tap,
 executes on-chain, and uploads the finalized receipt to 0G Storage before returning a
 verification link.
 

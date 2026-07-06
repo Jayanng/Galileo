@@ -194,6 +194,27 @@ export async function deleteWallet(userId: string, walletId: string): Promise<bo
   const rec = await walletStore.get(userId, walletId);
   if (!rec) return false;
   await walletStore.remove(userId, walletId);
+  // Cancel any active DCA/send intents that reference this wallet so they
+  // don't become orphaned — failing silently on subsequent worker ticks.
+  // Best-effort: receipt emission must not block the deletion.
+  try {
+    const { intentStore } = await import('../intents/intentStore');
+    const { createCancellationReceipt } = await import('../receipts');
+    const intents = await intentStore.listForUser(userId);
+    for (const intent of intents) {
+      if (intent.status !== 'active') continue;
+      if (intent.type === 'dca' || intent.type === 'send') {
+        if (intent.walletId === walletId) {
+          await intentStore.remove(intent.id);
+          createCancellationReceipt(intent, 'command').catch((e) =>
+            console.warn(`[wallet] cancellation receipt failed for intent ${intent.id}:`, (e as Error).message),
+          );
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[wallet] intent cleanup for wallet ${walletId} failed (non-fatal):`, (e as Error).message);
+  }
   return true;
 }
 

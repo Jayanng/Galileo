@@ -71,7 +71,7 @@ export async function stageDca(ctx: Context, userId: string, draft: DcaDraft): P
     );
     return;
   }
-  const res = await executeTool(userId, 'dca_create', draft);
+  const res = await executeTool(userId, 'dca_create', { ...draft, source: 'nl' });
   if (!res.success) {
     await ctx.reply(`⚠️ ${res.error}`);
     return;
@@ -189,7 +189,7 @@ export function parseSendScheduleText(text: string): SendScheduleDraft | null {
 
 /** Stage a recurring send from a parsed draft. Reuses executeTool for validation. */
 export async function stageSendSchedule(ctx: Context, userId: string, draft: SendScheduleDraft): Promise<void> {
-  const res = await executeTool(userId, 'send_schedule_create', draft);
+  const res = await executeTool(userId, 'send_schedule_create', { ...draft, source: 'nl' });
   if (!res.success) {
     await ctx.reply(`⚠️ ${res.error}`);
     return;
@@ -207,7 +207,7 @@ export async function stageSendSchedule(ctx: Context, userId: string, draft: Sen
 
 /** Stage an alert intent from a parsed draft. Reuses executeTool for validation. */
 export async function stageAlert(ctx: Context, userId: string, draft: AlertDraft): Promise<void> {
-  const res = await executeTool(userId, 'alert_create', draft);
+  const res = await executeTool(userId, 'alert_create', { ...draft, source: 'nl' });
   if (!res.success) {
     await ctx.reply(`⚠️ ${res.error}`);
     return;

@@ -526,6 +526,7 @@ export async function executeTool(
         await intentStore.add(intent);
         console.log(`[toolExecutor] send_schedule_create id=${intent.id} ${amount} OG→${recipient} ${schedule.raw}`);
         // F5: emit a send creation receipt (proves the recurring send was set up).
+        const sendCreateSource = args.source || (computeContext ? 'nl' : 'command');
         let creationReceiptId: string | null = null;
         let creationReceiptRootHash: string | null = null;
         try {
@@ -540,12 +541,12 @@ export async function executeTool(
             walletName,
             scheduleRaw: schedule.raw,
             scheduleIntervalMs: schedule.intervalMs,
-            source: computeContext ? 'nl' : 'command',
+            source: sendCreateSource,
             compute: buildComputeLeg(computeContext),
           });
           creationReceiptId = creation.receiptId;
           creationReceiptRootHash = creation.rootHash;
-          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId, creationReceiptRootHash: creation.rootHash ?? undefined });
         } catch (e) {
           console.warn(`[toolExecutor] send_schedule creation receipt failed:`, (e as Error).message);
         }
@@ -635,6 +636,7 @@ export async function executeTool(
         await intentStore.add(intent);
         console.log(`[toolExecutor] dca_create id=${intent.id} ${amount} ${fromToken}\u2192${toToken} ${schedule.raw}`);
         // F5: emit a DCA creation receipt (proves the schedule was set up).
+        const dcaCreateSource = args.source || (computeContext ? 'nl' : 'command');
         const walletName = wallets.find((w) => w.id === resolvedWalletId)?.name;
         let creationReceiptId: string | null = null;
         let creationReceiptRootHash: string | null = null;
@@ -647,12 +649,12 @@ export async function executeTool(
             scheduleIntervalMs: schedule.intervalMs,
             walletId: resolvedWalletId!,
             walletName,
-            source: computeContext ? 'nl' : 'command',
+            source: dcaCreateSource,
             compute: buildComputeLeg(computeContext),
           });
           creationReceiptId = creation.receiptId;
           creationReceiptRootHash = creation.rootHash;
-          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId, creationReceiptRootHash: creation.rootHash ?? undefined });
         } catch (e) {
           console.warn(`[toolExecutor] dca creation receipt failed:`, (e as Error).message);
         }
@@ -728,6 +730,7 @@ export async function executeTool(
         await intentStore.add(intent);
         console.log(`[toolExecutor] alert_create id=${intent.id} ${upper} ${operator} $${threshold}`);
         // F5: emit an alert creation receipt (proves the alert was armed).
+        const alertCreateSource = args.source || (computeContext ? 'nl' : 'command');
         try {
           const creation = await createAlertCreationReceipt({
             userId,
@@ -736,10 +739,10 @@ export async function executeTool(
             coingeckoId,
             operator,
             threshold,
-            source: computeContext ? 'nl' : 'command',
+            source: alertCreateSource,
             compute: buildComputeLeg(computeContext),
           });
-          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });
+          await intentStore.update(intent.id, { creationReceiptId: creation.receiptId, creationReceiptRootHash: creation.rootHash ?? undefined });
         } catch (e) {
           console.warn(`[toolExecutor] alert creation receipt failed:`, (e as Error).message);
         }

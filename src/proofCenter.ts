@@ -188,6 +188,15 @@ export function renderReceipt(
     ? `<a href="https://scan.0g.ai/${displayRootHash}" target="_blank" class="mono">${redact(displayRootHash, 20)}</a>`
     : '<span class="muted">— (not yet uploaded)</span>';
 
+  // Creation Receipt link: show "(this receipt)" when this IS the creation
+  // receipt (intentLink exists but no creationReceiptId references a parent).
+  const creationReceiptCell =
+    'intentLink' in r && r.intentLink
+      ? r.intentLink.creationReceiptId
+        ? `<strong class="mono">${redact(r.intentLink.creationReceiptId, 18)}</strong>`
+        : '<span class="muted">— (this receipt)</span>'
+      : null;
+
   // Action-type-specific "Parsed Intent" section.
   const parsedSection =
     r.actionType === 'send'
@@ -225,7 +234,7 @@ export function renderReceipt(
           <h2>Intent Link</h2>
           <div class="grid">
             <div><span class="muted">Intent ID</span><br><strong class="mono">${r.intentLink.intentId}</strong></div>
-            <div><span class="muted">Creation Receipt</span><br><strong class="mono">${r.intentLink.creationReceiptId ? redact(r.intentLink.creationReceiptId, 18) : '—'}</strong></div>
+            <div><span class="muted">Creation Receipt</span><br>${creationReceiptCell}</div>
           </div>
         </div>`
       : '';
@@ -368,13 +377,14 @@ function renderSwapParsed(r: Extract<IntentReceipt, { actionType: 'swap' }>): st
 /** DCA-specific parsed-intent grid (schedule, route, wallet). */
 function renderDcaParsed(r: Extract<IntentReceipt, { actionType: 'dca' }>): string {
   const p = r.parsedIntent;
+  const walletDisplay = p.walletName || 'wallet ' + redact(p.walletId, 8);
   return `
     <div><span class="muted">Type</span><br><strong>${p.type}</strong></div>
     <div><span class="muted">Route</span><br><strong>${p.fromToken} → ${p.toToken}</strong></div>
     <div><span class="muted">Amount</span><br><strong>${p.amount}</strong></div>
     <div><span class="muted">Schedule</span><br><strong>${p.scheduleRaw}</strong></div>
     <div><span class="muted">Interval</span><br><strong>${(p.scheduleIntervalMs / 1000 / 60).toFixed(0)} min</strong></div>
-    <div><span class="muted">From Wallet</span><br><strong>${p.walletName ?? '—'}</strong></div>
+    <div><span class="muted">From Wallet</span><br><strong>${walletDisplay}</strong></div>
   `;
 }
 
@@ -565,6 +575,10 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
   // For real receipts (looksLikeReceipt), fetch the canonical on-chain block
   // timestamp via a 5-min cached RPC call. Old receipts predating the
   // blockNumber field skip this and the Chain card just shows the tx hash.
+  // Check if this receipt has a TEE compute leg with verified=true, so the
+  // Evidence Sources footer can show 'active' instead of just 'available'.
+  const teeActive = looksLikeReceipt(recovered) && (recovered as IntentReceipt).compute?.verified === true;
+
   let blockTimestamp: string | null = null;
   if (looksLikeReceipt(recovered) && recovered.chain?.blockNumber !== undefined) {
     blockTimestamp = await getBlockTimestamp(recovered.chain.blockNumber);
@@ -595,7 +609,7 @@ export async function verifyPage(_req: IncomingMessage, res: ServerResponse, inp
         <div><span class="muted">0G Compute</span><br>${statusBadge(config.OG_COMPUTE_FALLBACK ? 'fallback' : 'active')}</div>
         <div><span class="muted">0G Storage</span><br>${statusBadge(config.OG_STORAGE_ENABLED ? 'active' : 'disabled')}</div>
         <div><span class="muted">0G Chain</span><br>${statusBadge('active')}</div>
-        <div><span class="muted">TEE Verification</span><br>${statusBadge(config.OG_COMPUTE_FALLBACK ? 'unavailable' : 'available')}</div>
+        <div><span class="muted">TEE Verification</span><br>${statusBadge(teeActive ? 'active' : config.OG_COMPUTE_FALLBACK ? 'unavailable' : 'available')}</div>
       </div>
     </div>
   `);
@@ -688,6 +702,51 @@ export async function statusPage(_req: IncomingMessage, res: ServerResponse): Pr
   res.end(body);
 }
 
+// ─── /nft-metadata/:key — Serve NFT metadata from 0G Storage ─────────────
+//
+// This endpoint allows explorers (ChainScan, block explorers, etc.) to fetch
+// NFT metadata via a standard HTTP URL. The metadata JSON was uploaded to 0G
+// Storage during minting (keyed as `nft-<userId>`), and this proxy retrieves
+// and serves it with the correct content-type so explorers can render it.
+//
+// This is purely a read-through proxy — no data is stored or cached here.
+// If 0G Storage is disabled or the metadata key is not found, a 404 is returned.
+
+export async function nftMetadataPage(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  key: string,
+): Promise<void> {
+  if (!config.OG_STORAGE_ENABLED) {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: '0G Storage is disabled' }));
+    return;
+  }
+
+  // Sanitize: only allow alphanumeric, hyphens, underscores (prevent path traversal)
+  if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid metadata key' }));
+    return;
+  }
+
+  try {
+    const { downloadJson } = await import('./og/fileStorage');
+    const data = await downloadJson<unknown>(key);
+    if (!data) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Metadata not found' }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(data));
+  } catch (e) {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Failed to fetch metadata from 0G Storage' }));
+    console.warn(`[nft-metadata] error fetching key="${key}":`, (e as Error).message);
+  }
+}
+
 // ─── /intents/live — All scheduled intents ────────────────────────────────
 
 export async function intentsLivePage(_req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -711,11 +770,20 @@ export async function intentsLivePage(_req: IncomingMessage, res: ServerResponse
         const lastExec = intent.lastExecutedAt
           ? new Date(intent.lastExecutedAt).toISOString().replace('T', ' ').slice(0, 19)
           : '—';
-        const nextRun = intent.nextRunAt
-          ? new Date(intent.nextRunAt).toISOString().replace('T', ' ').slice(0, 19)
-          : '—';
+        const nextRun = intent.type === 'alert'
+          ? '<span class="muted">every tick</span>'
+          : intent.nextRunAt
+            ? new Date(intent.nextRunAt).toISOString().replace('T', ' ').slice(0, 19)
+            : '—';
         let receiptLink = '—';
-        if (intent.creationReceiptId) {
+        // Use the stored rootHash directly when available (most reliable),
+        // fall back to receiptStore lookup for backward compat with intents
+        // that only have creationReceiptId (created before rootHash was stored
+        // on the intent itself).
+        const receiptRootHash = intent.creationReceiptRootHash;
+        if (receiptRootHash) {
+          receiptLink = `<a href="/verify/${receiptRootHash}" target="_blank" class="mono">🧾</a>`;
+        } else if (intent.creationReceiptId) {
           try {
             const meta = await receiptStore.get(intent.creationReceiptId);
             if (meta?.rootHash) {

@@ -49,6 +49,7 @@ export const DcaIntentSchema = z.object({
   lastExecutedAt: z.number().int().nullable(), // null until first fire
   createdAt: z.number().int(),
   creationReceiptId: z.string().optional(),
+  creationReceiptRootHash: z.string().optional(),
 });
 export type DcaIntent = z.infer<typeof DcaIntentSchema>;
 
@@ -67,6 +68,7 @@ export const AlertIntentSchema = z.object({
   firedAt: z.number().int().nullable(), // null until condition met
   createdAt: z.number().int(),
   creationReceiptId: z.string().optional(),
+  creationReceiptRootHash: z.string().optional(),
 });
 export type AlertIntent = z.infer<typeof AlertIntentSchema>;
 
@@ -89,6 +91,7 @@ export const SendIntentSchema = z.object({
   lastExecutedAt: z.number().int().nullable(),
   createdAt: z.number().int(),
   creationReceiptId: z.string().optional(),
+  creationReceiptRootHash: z.string().optional(),
 });
 export type SendIntent = z.infer<typeof SendIntentSchema>;
 

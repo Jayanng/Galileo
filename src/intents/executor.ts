@@ -19,10 +19,13 @@ import {
   type SendIntent,
   type Intent,
 } from './types';
+import { intentStore } from './intentStore';
 import { getPriceUSD, getPriceByCoinGeckoId, SYMBOL_TO_COINGECKO_ID } from '../og/prices';
 import { executeSwap } from '../swap/swapService';
 import { pendingSwaps, type PendingSwap } from '../swap/pendingSwap';
-import { getWallet, getSigner } from '../wallet/walletService';
+import { getWallet, getSigner, getWalletBalance } from '../wallet/walletService';
+import { getBalance, formatOG } from '../og/chain';
+import { tokenBalance } from '../og/erc20';
 import { recordTx } from '../ai/memory';
 import { createDcaExecutionReceipt, createAlertFireReceipt, createSendExecutionReceipt } from '../receipts';
 
@@ -181,9 +184,31 @@ async function executeSend(intent: SendIntent, bot: TelegramBot): Promise<Execut
   if (!wallet) {
     await bot.api.sendMessage(
       intent.userId,
-      `⚠️ Recurring send paused: wallet "${intent.walletId}" no longer exists. Use /intents to cancel.`,
+      `⚠️ Recurring send removed: wallet "${intent.walletId}" no longer exists. The schedule has been automatically cancelled.`,
     );
-    return { intent: { ...intent, status: 'paused' } };
+    await intentStore.remove(intent.id).catch(() => {});
+    return { intent: { ...intent, status: 'active' } };
+  }
+
+  // Proactive balance check: warn before execution if balance is too low.
+  try {
+    const amountWei = parseEther(intent.amount);
+    const bal = await getWalletBalance(intent.userId, intent.walletId);
+    if (bal !== null && bal < amountWei) {
+      await bot.api.sendMessage(
+        intent.userId,
+        `⚠️ Insufficient OG for recurring send (${intent.schedule.raw}): You have ${formatOG(bal)} OG but need ${intent.amount} OG (plus gas). The schedule will retry next cycle — top up your wallet.`,
+      );
+      return {
+        intent: {
+          ...intent,
+          nextRunAt: computeNextRun(intent.schedule, now),
+          lastExecutedAt: intent.lastExecutedAt,
+        },
+      };
+    }
+  } catch (e) {
+    console.warn(`[intents] send balance check failed:`, (e as Error).message);
   }
 
   const signer = await getSigner(intent.userId, intent.walletId);
@@ -268,9 +293,48 @@ async function executeDca(intent: DcaIntent, bot: TelegramBot): Promise<ExecuteR
   if (!wallet) {
     await bot.api.sendMessage(
       intent.userId,
-      `⚠️ DCA paused: wallet "${intent.walletId}" no longer exists. Use /intents to cancel.`,
+      `⚠️ DCA removed: wallet "${intent.walletId}" no longer exists. The schedule has been automatically cancelled.`,
     );
-    return { intent: { ...intent, status: 'paused' } };
+    await intentStore.remove(intent.id).catch(() => {});
+    return { intent: { ...intent, status: 'active' } };
+  }
+
+  // Proactive balance check: warn before execution if insufficient funds.
+  try {
+    const amountWei = parseEther(intent.amount);
+    if (intent.fromToken === 'OG') {
+      const bal = await getBalance(wallet.address);
+      if (bal < amountWei) {
+        await bot.api.sendMessage(
+          intent.userId,
+          `⚠️ Insufficient OG for DCA (${intent.schedule.raw}): You have ${formatOG(bal)} OG but need ${intent.amount} OG. The schedule will retry next cycle — top up your wallet.`,
+        );
+        return {
+          intent: {
+            ...intent,
+            nextRunAt: computeNextRun(intent.schedule, now),
+            lastExecutedAt: intent.lastExecutedAt,
+          },
+        };
+      }
+    } else if (intent.fromToken === 'WOG' && config.WOG_ADDRESS && isAddress(config.WOG_ADDRESS)) {
+      const bal = await tokenBalance(config.WOG_ADDRESS, wallet.address);
+      if (bal < amountWei) {
+        await bot.api.sendMessage(
+          intent.userId,
+          `⚠️ Insufficient WOG for DCA (${intent.schedule.raw}): You have ${formatEther(bal)} WOG but need ${intent.amount} WOG. The schedule will retry next cycle — top up your wallet.`,
+        );
+        return {
+          intent: {
+            ...intent,
+            nextRunAt: computeNextRun(intent.schedule, now),
+            lastExecutedAt: intent.lastExecutedAt,
+          },
+        };
+      }
+    }
+  } catch (e) {
+    console.warn(`[intents] DCA balance check failed:`, (e as Error).message);
   }
 
   const built = buildDcaPendingSwap(intent, wallet.name);

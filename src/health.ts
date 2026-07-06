@@ -2,18 +2,19 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { proofsPage, verifyPage, statusPage, intentsLivePage } from './proofCenter';
+import { proofsPage, verifyPage, statusPage, intentsLivePage, nftMetadataPage } from './proofCenter';
 
 /**
  * HTTP server for health checks and the public Proof Center.
  *
- *   GET /health              -> 200 { status: "ok", uptime }
- *   GET /                    -> 200 { status: "ok", uptime }
- *   GET /proofs              -> Proof Center live feed (HTML)
- *   GET /verify/:rootHash    -> Receipt verification from 0G Storage
- *   GET /status              -> Health dashboard (compute, storage, chain)
- *   GET /intents/live         -> DCA & alert executions with proof links
- *   anything else            -> 404
+ *   GET /health                    -> 200 { status: "ok", uptime }
+ *   GET /                          -> 200 { status: "ok", uptime }
+ *   GET /proofs                    -> Proof Center live feed (HTML)
+ *   GET /verify/:rootHash          -> Receipt verification from 0G Storage
+ *   GET /status                    -> Health dashboard (compute, storage, chain)
+ *   GET /intents/live               -> DCA & alert executions with proof links
+ *   GET /nft-metadata/:key          -> NFT metadata JSON from 0G Storage (for explorers)
+ *   anything else                  -> 404
  */
 
 let _proofsPath: string;
@@ -51,6 +52,14 @@ export function startHealthServer(port: number): Server {
 
     if (req.method === 'GET' && url === '/intents/live') {
       void intentsLivePage(req, res);
+      return;
+    }
+
+    // NFT metadata proxy — serves JSON metadata from 0G Storage so explorers
+    // (ChainScan, block explorers, etc.) can resolve the tokenURI via HTTP.
+    if (req.method === 'GET' && url.startsWith('/nft-metadata/')) {
+      const key = url.slice('/nft-metadata/'.length).trim();
+      void nftMetadataPage(req, res, key);
       return;
     }
 

@@ -43,7 +43,8 @@ for (const f of files) {
 //   test-tool-*         — src/ai/toolExecutor.ts case-shape inspection
 //   test-verify-        — src/proofCenter.ts rendering
 //   test-receipt-       — src/receipts/* + proofCenter rendering
-const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-|test-receipt-)/.test(f);
+//   test-nft-           — NFT metadata endpoint (proofCenter.ts route)
+const useTsx = /^(test-intent-|test-contract-|test-transaction-|test-help-|test-bot-|test-tool-|test-verify-|test-receipt-|test-nft-)/.test(f);
   const tsxBin = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
   const tsxPath = join(here, 'node_modules', '.bin', tsxBin);
   const cmd = useTsx ? tsxPath : 'node';

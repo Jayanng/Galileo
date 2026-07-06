@@ -111,7 +111,10 @@ export async function mintProfileNft(
   const c = contract(operatorWallet);
   const metadata = buildMetadata(userId, userAddress, createdAt, walletCount);
 
-  // Upload metadata to 0G Storage, fall back to data URI
+  // Upload metadata to 0G Storage for the F5 receipt and verifiability.
+  // The on-chain tokenURI uses a data URI (base64-encoded JSON) so that
+  // chain explorers (ChainScan, block explorers, etc.) can read the
+  // metadata without needing custom protocol support for 0g://.
   let tokenUri: string;
   let rootHash: string | null = null;
 
@@ -119,14 +122,13 @@ export async function mintProfileNft(
     try {
       const metaKey = `nft-${userId}`;
       rootHash = await uploadJson(metaKey, metadata as unknown as Record<string, unknown>);
-      tokenUri = `0g://${rootHash}`;
     } catch (e) {
-      console.warn(`[nft] 0G Storage upload failed, using data URI: ${(e as Error).message}`);
-      tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
+      console.warn(`[nft] 0G Storage upload failed (non-fatal): ${(e as Error).message}`);
     }
-  } else {
-    tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
   }
+  // Always use a data URI for the on-chain tokenURI — explorers must be
+  // able to read the metadata without resolving custom URI schemes.
+  tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
 
   const tx = await (c.mint(userAddress, tokenUri) as Promise<{ wait: () => Promise<{ hash: string; blockNumber: number }> }>);
   const txReceipt = await tx.wait();
@@ -260,13 +262,12 @@ export async function updateProfileMetadata(
     try {
       const metaKey = `nft-${userId}`;
       rootHash = await uploadJson(metaKey, metadata as unknown as Record<string, unknown>);
-      tokenUri = `0g://${rootHash}`;
     } catch {
-      tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
+      // non-fatal — data URI works without 0G Storage
     }
-  } else {
-    tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
   }
+  // Always use a data URI so explorers can read the metadata.
+  tokenUri = `data:application/json;base64,${Buffer.from(JSON.stringify(metadata)).toString('base64')}`;
 
   const tx = await (c.setTokenURI(tokenIdBig, tokenUri) as Promise<{ wait: () => Promise<unknown> }>);
   await tx.wait();

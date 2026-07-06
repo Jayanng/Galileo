@@ -305,6 +305,7 @@ export interface DcaCreationInput {
   walletName?: string;
   rawInput?: string;
   compute?: ComputeLeg | null;
+  source?: 'nl' | 'command';
 }
 
 export async function createDcaCreationReceipt(input: DcaCreationInput): Promise<CreateResult> {
@@ -328,7 +329,7 @@ export async function createDcaCreationReceipt(input: DcaCreationInput): Promise
     status: 'created',
     createdAt: now,
     finalizedAt: now,
-    userIntent: { raw, source: 'nl' },
+    userIntent: { raw, source: input.source ?? 'nl' },
     parsedIntent: {
       type: 'dca',
       fromToken: input.fromToken,
@@ -435,6 +436,7 @@ export interface AlertCreationInput {
   threshold: number;
   rawInput?: string;
   compute?: ComputeLeg | null;
+  source?: 'nl' | 'command';
 }
 
 export async function createAlertCreationReceipt(input: AlertCreationInput): Promise<CreateResult> {
@@ -461,7 +463,7 @@ export async function createAlertCreationReceipt(input: AlertCreationInput): Pro
     status: 'armed',
     createdAt: now,
     finalizedAt: now,
-    userIntent: { raw, source: 'nl' },
+    userIntent: { raw, source: input.source ?? 'nl' },
     parsedIntent: {
       type: 'alert',
       symbol: input.symbol,
@@ -593,6 +595,7 @@ export interface SendCreationInput {
   scheduleIntervalMs: number;
   rawInput?: string;
   compute?: ComputeLeg | null;
+  source?: 'nl' | 'command';
 }
 
 export async function createSendCreationReceipt(input: SendCreationInput): Promise<CreateResult> {
@@ -617,7 +620,7 @@ export async function createSendCreationReceipt(input: SendCreationInput): Promi
     status: 'staged',
     createdAt: now,
     finalizedAt: now,
-    userIntent: { raw, source: 'nl' },
+    userIntent: { raw, source: input.source ?? 'nl' },
     parsedIntent: {
       type: 'send',
       amount: input.amount,

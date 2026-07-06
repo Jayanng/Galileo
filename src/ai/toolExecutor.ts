@@ -540,6 +540,7 @@ export async function executeTool(
             walletName,
             scheduleRaw: schedule.raw,
             scheduleIntervalMs: schedule.intervalMs,
+            source: computeContext ? 'nl' : 'command',
             compute: buildComputeLeg(computeContext),
           });
           creationReceiptId = creation.receiptId;
@@ -646,6 +647,7 @@ export async function executeTool(
             scheduleIntervalMs: schedule.intervalMs,
             walletId: resolvedWalletId!,
             walletName,
+            source: computeContext ? 'nl' : 'command',
             compute: buildComputeLeg(computeContext),
           });
           creationReceiptId = creation.receiptId;
@@ -734,6 +736,7 @@ export async function executeTool(
             coingeckoId,
             operator,
             threshold,
+            source: computeContext ? 'nl' : 'command',
             compute: buildComputeLeg(computeContext),
           });
           await intentStore.update(intent.id, { creationReceiptId: creation.receiptId });

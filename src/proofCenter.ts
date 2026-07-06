@@ -184,7 +184,7 @@ export function renderReceipt(
   // pre-populate it).
   const displayRootHash = rootHashOverride ?? r.storage.rootHash;
   const rootLine = displayRootHash
-    ? `<span class="mono">${redact(displayRootHash, 20)}</span>`
+    ? `<a href="https://scan.0g.ai/${displayRootHash}" target="_blank" class="mono">${redact(displayRootHash, 20)}</a>`
     : '<span class="muted">— (not yet uploaded)</span>';
 
   // Action-type-specific "Parsed Intent" section.

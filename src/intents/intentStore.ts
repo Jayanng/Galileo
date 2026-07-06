@@ -117,8 +117,14 @@ class OgFileIntentStore implements IntentStore {
       if (Array.isArray(remote) && remote.length > 0) {
         const local = await this.local.listAll();
         if (local.length === 0) {
-          for (const intent of coerce(remote)) await this.local.add(intent);
+          const recovered = coerce(remote);
+          for (const intent of recovered) await this.local.add(intent);
+          if (recovered.length > 0) {
+            console.log(`[intents] hydrated ${recovered.length} intent(s) from 0G Storage after cold start`);
+          }
         }
+      } else {
+        console.log('[intents] no intents found on 0G Storage to hydrate (fresh start or empty store)');
       }
     } catch (e) {
       console.warn('[intents] 0G Storage hydrate failed:', (e as Error).message);

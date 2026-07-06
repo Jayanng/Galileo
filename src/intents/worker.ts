@@ -9,6 +9,13 @@
  * executions are serialized (await between intents) to avoid nonce conflicts
  * on a user's wallet.
  *
+ * Ticks use a recursive setTimeout pattern: each tick fully completes before
+ * the next one begins. This prevents overlapping ticks that would cause nonce
+ * conflicts when two concurrent ticks try to execute the same DCA for the same
+ * user. In-flight intent tracking additionally prevents the same intent from
+ * being picked up twice across tick boundaries (e.g. when a DCA's schedule is
+ * shorter than the tick interval plus execution time).
+ *
  * The worker must be stopped on SIGTERM so an in-flight tick can complete
  * before the process exits. Fly's deploys send SIGTERM, and the index.ts
  * shutdown handler awaits worker.stop().
@@ -76,10 +83,36 @@ export function startIntentWorker(deps: IntentWorkerDeps): IntentWorkerHandle {
   let initialTimer: NodeJS.Timeout | null = null;
   let inFlight: Promise<void> | null = null;
 
+  // Track intent IDs currently being executed so concurrent ticks (from the
+  // recursive setTimeout pattern below) don't process the same intent twice.
+  // This mainly protects against DCAs with schedules shorter than the tick
+  // interval + execution time, where nextRunAt hasn't been updated yet when
+  // the next tick checks for due intents.
+  const inFlightIntents = new Set<string>();
+
+  // Wrap the executor to skip intents already being processed by another tick.
+  // When skipping, return the intent unchanged so store.update is a no-op.
+  const wrappedExecutor = async (
+    intent: Intent,
+    bot: TelegramBot,
+  ): Promise<ExecuteResult> => {
+    if (inFlightIntents.has(intent.id)) {
+      return { intent };
+    }
+    inFlightIntents.add(intent.id);
+    try {
+      return await (deps.executor ?? executeIntent)(intent, bot);
+    } finally {
+      inFlightIntents.delete(intent.id);
+    }
+  };
+
+  const depsWithGuard = { ...deps, executor: wrappedExecutor };
+
   const runTick = (): Promise<void> => {
     inFlight = (async () => {
       const t0 = Date.now();
-      const processed = await executeDueIntents(deps);
+      const processed = await executeDueIntents(depsWithGuard);
       if (processed > 0) {
         console.log(`[intents-worker] tick processed ${processed} intent(s) in ${Date.now() - t0}ms`);
       }
@@ -87,17 +120,36 @@ export function startIntentWorker(deps: IntentWorkerDeps): IntentWorkerHandle {
     return inFlight;
   };
 
-  initialTimer = setTimeout(() => {
-    void runTick();
-    timer = setInterval(() => {
-      void runTick();
+  // Use recursive setTimeout so each tick fully completes before the next one
+  // begins. This prevents overlapping ticks that cause nonce conflicts when
+  // two concurrent ticks try to execute the same DCA for the same wallet.
+  // The intervalMs delay is measured from tick completion to next tick start.
+  // Each tick is wrapped in try/catch so a transient failure (e.g. RPC error,
+  // filesystem hiccup) does not permanently stop the worker from ticking.
+  const scheduleNext = (): void => {
+    timer = setTimeout(async () => {
+      try {
+        await runTick();
+      } catch (e) {
+        console.error('[intents-worker] tick failed, scheduling next:', e);
+      }
+      scheduleNext();
     }, intervalMs);
+  };
+
+  initialTimer = setTimeout(async () => {
+    try {
+      await runTick();
+    } catch (e) {
+      console.error('[intents-worker] initial tick failed, scheduling next:', e);
+    }
+    scheduleNext();
   }, initialDelayMs);
 
   return {
     stop: async () => {
       if (initialTimer) clearTimeout(initialTimer);
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
       timer = null;
       initialTimer = null;
       if (inFlight) {

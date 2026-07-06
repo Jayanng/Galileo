@@ -14,7 +14,7 @@
 
 ### Natural-language finance where every intent is TEE-attested, user-confirmed, executed on-chain, and independently auditable from 0G Storage.
 
-**Galileo is the first verifiable AI wallet.** It is not a Telegram wallet that uses 0G —
+**Galileo is the first verifiable AI wallet.** It is not just a Telegram wallet that uses 0G —
 it is a **verifiable intent layer for AI agents that move value.** Every financial action
 travels a single primitive — *intent → TEE-attested parse → risk checks → user confirmation →
 on-chain execution → 0G Storage receipt* — and ends with a **public verification link**,

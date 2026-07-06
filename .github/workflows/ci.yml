@@ -43,6 +43,19 @@ jobs:
           USDT_ADDRESS=0x1637e005faF71226D34b5f12AA069FE5C06B6495
           EOF
 
+      # @0gfoundation/0g-compute-ts-sdk@0.8.4 ships ESM .js files in
+      # lib.esm/ without a "type":"module" declaration in package.json.
+      # Node 20/22 treats .js files as CJS by default, so the ESM named
+      # exports (e.g. 'C' for CONTRACT_ADDRESSES) aren't detected and any
+      # test that transitively imports the SDK crashes at import time with
+      # "SyntaxError: The requested module './index-e381c802.js' does not
+      # provide an export named 'C'". Node 24+ has --experimental-detect-module
+      # enabled by default, which is why this only fails in CI (Node 20/22).
+      # Adding a local package.json with {"type":"module"} fixes the
+      # module-type detection for all .js files in lib.esm/.
+      - name: Patch 0g-compute SDK ESM module type
+        run: echo '{"type":"module"}' > node_modules/@0gfoundation/0g-compute-ts-sdk/lib.esm/package.json
+
       - name: Typecheck
         run: npm run typecheck
 

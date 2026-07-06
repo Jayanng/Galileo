@@ -5,7 +5,7 @@
  *   GET /proofs        — Live feed of recent verified proofs
  *   GET /verify/:root  — Recover receipt from 0G Storage root hash
  *   GET /status        — Health dashboard: compute, storage, chain, latest proof
- *   GET /intents/live  — DCA and alert executions with proof links and tx hashes
+ *   GET /intents/live  — All scheduled intents (DCA, sends, alerts) with status and receipt links
  *
  * All pages are self-contained HTML with inline CSS. No external dependencies.
  * Sensitive data (private keys, full user IDs) is redacted.
@@ -17,6 +17,7 @@ import { provider } from './og/chain';
 import { config } from './config';
 import { intentStore } from './intents/intentStore';
 import { looksLikeReceipt, type Confirmation, type IntentReceipt } from './receipts';
+import * as receiptStore from './receipts/receiptStore';
 
 // ─── Block-timestamp cache (5 min TTL) ─────────────────────────────────────
 //
@@ -413,12 +414,52 @@ function renderKeyRevealParsed(r: Extract<IntentReceipt, { actionType: 'key_reve
   `;
 }
 
+// ─── Intent type icon helper ──────────────────────────────────────────────
+
+function intentTypeIcon(type: string): string {
+  return type === 'dca' ? '📊' :
+    type === 'send' ? '📤' :
+    type === 'alert' ? '🔔' : '🧾';
+}
+
 // ─── /proofs — Live feed of recent verified proofs ────────────────────────
 
 export async function proofsPage(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // Fetch recent receipts from the index
+  let receiptRows = '';
+  try {
+    const recent = await receiptStore.listAll(20);
+    if (recent.length === 0) {
+      receiptRows = '<tr><td colspan="5" class="muted">No receipts yet.</td></tr>';
+    } else {
+      receiptRows = recent.map((r) => {
+        const icon = intentTypeIcon(r.actionType);
+        const rootLink = r.rootHash
+          ? `<a href="/verify/${r.rootHash}" class="mono" target="_blank">${redact(r.rootHash, 16)}</a>`
+          : '—';
+        return `<tr>
+          <td class="mono">${redactUserId(r.userId)}</td>
+          <td>${icon} ${r.actionType}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td class="mono">${fmtTs(r.createdAt)}</td>
+          <td>${rootLink}</td>
+        </tr>`;
+      }).join('\n');
+    }
+  } catch (e) {
+    receiptRows = `<tr><td colspan="5" class="muted">Error: ${(e as Error).message}</td></tr>`;
+  }
+
   const body = html('Live Proofs', `
     <h1>Live Proof Feed</h1>
     <p class="muted">Recent verified wallet intents and TEE receipts from all Galileo users.</p>
+
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>User</th><th>Action</th><th>Status</th><th>Created</th><th>Root Hash</th></tr></thead>
+        <tbody>${receiptRows}</tbody>
+      </table>
+    </div>
 
     <div class="card">
       <h2>System</h2>
@@ -437,7 +478,7 @@ export async function proofsPage(_req: IncomingMessage, res: ServerResponse): Pr
       </div>
     </div>
 
-    <p class="muted" style="margin-top:1rem">For full receipt verification, use <code>/verify/:rootHash</code> with any 0G Storage root hash.</p>
+    <p class="muted" style="margin-top:1rem">Use <code>/verify/:rootHash</code> to view a full receipt, or <a href="/intents/live">/intents/live</a> for scheduled executions.</p>
   `);
   res.writeHead(200, { 'content-type': 'text/html' });
   res.end(body);
@@ -647,47 +688,63 @@ export async function statusPage(_req: IncomingMessage, res: ServerResponse): Pr
   res.end(body);
 }
 
-// ─── /intents/live — DCA and alert executions ─────────────────────────────
+// ─── /intents/live — All scheduled intents ────────────────────────────────
 
 export async function intentsLivePage(_req: IncomingMessage, res: ServerResponse): Promise<void> {
   let rows = '';
   try {
     const all = await intentStore.listAll();
     if (all.length === 0) {
-      rows = '<tr><td colspan="6" class="muted">No intents created yet.</td></tr>';
+      rows = '<tr><td colspan="7" class="muted">No intents created yet.</td></tr>';
     } else {
-      rows = all.map((intent: any) => {
-        const typeIcon = intent.type === 'dca' ? '📊' : '🔔';
-        const summary = intent.type === 'dca'
-          ? `DCA ${intent.amount} ${intent.fromToken}→${intent.toToken} / ${intent.schedule.raw ?? intent.schedule.intervalMs}`
-          : `Alert ${intent.symbol} ${intent.operator} $${intent.threshold}`;
+      const rowsPromises = all.map(async (intent: any) => {
+        const icon = intentTypeIcon(intent.type);
+        let summary: string;
+        if (intent.type === 'dca') {
+          summary = `DCA ${intent.amount} ${intent.fromToken}→${intent.toToken} / ${intent.schedule.raw ?? intent.schedule.intervalMs}`;
+        } else if (intent.type === 'send') {
+          const recip = intent.recipient?.value ?? intent.recipient?.resolvedAddress ?? '?';
+          summary = `Send ${intent.amount} OG→${recip} / ${intent.schedule.raw ?? intent.schedule.intervalMs}`;
+        } else {
+          summary = `Alert ${intent.symbol ?? '?'} ${intent.operator ?? '?'} $${intent.threshold ?? '?'}`;
+        }
         const lastExec = intent.lastExecutedAt
           ? new Date(intent.lastExecutedAt).toISOString().replace('T', ' ').slice(0, 19)
           : '—';
         const nextRun = intent.nextRunAt
           ? new Date(intent.nextRunAt).toISOString().replace('T', ' ').slice(0, 19)
           : '—';
+        let receiptLink = '—';
+        if (intent.creationReceiptId) {
+          try {
+            const meta = await receiptStore.get(intent.creationReceiptId);
+            if (meta?.rootHash) {
+              receiptLink = `<a href="/verify/${meta.rootHash}" target="_blank" class="mono">🧾</a>`;
+            }
+          } catch { /* non-fatal */ }
+        }
         return `<tr>
           <td class="mono">${redactUserId(intent.userId)}</td>
-          <td>${typeIcon} ${summary}</td>
+          <td>${icon} ${summary}</td>
           <td>${statusBadge(intent.status)}</td>
           <td class="mono">${lastExec}</td>
           <td class="mono">${nextRun}</td>
-          <td>${intent.txHash ? `<a href="https://chainscan-galileo.0g.ai/tx/${intent.txHash}" target="_blank" class="mono">${redact(intent.txHash, 14)}</a>` : '—'}</td>
+          <td class="mono">${receiptLink}</td>
         </tr>`;
-      }).join('\n');
+      });
+      rows = (await Promise.all(rowsPromises)).join('\n');
     }
   } catch (e) {
-    rows = `<tr><td colspan="6" class="muted">Error loading intents: ${(e as Error).message}</td></tr>`;
+    rows = `<tr><td colspan="7" class="muted">Error loading intents: ${(e as Error).message}</td></tr>`;
   }
 
   const body = html('Live Intents', `
-    <h1>DCA &amp; Alert Executions</h1>
-    <p class="muted">All scheduled intents with proof links and transaction hashes.</p>
+    <h1>Scheduled Intents</h1>
+    <p class="muted">All scheduled intents (DCA, recurring sends, alerts) with status and receipt links.</p>
     <div class="card" style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>User</th><th>Intent</th><th>Status</th><th>Last Executed</th><th>Next Run</th><th>Tx Hash</th>
+          <th>User</th><th>Intent</th><th>Status</th><th>Last Executed</th><th>Next Run</th><th>Receipt</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>

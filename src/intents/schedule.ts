@@ -47,12 +47,16 @@ export function parseSchedule(input: string): Schedule {
   const raw = input.trim();
   if (!raw) throw new ScheduleParseError('Schedule cannot be empty.');
 
-  const lower = raw.toLowerCase();
+  // Normalize "in the next 1 minute" / "in 30 mins" → bare interval.
+  // Keep `raw` in the return value for display (user's original phrasing).
+  const normalized = raw.replace(/^in\s+(?:the\s+next\s+)?(.+)$/i, '$1').trim();
+  const lower = normalized.toLowerCase();
+
   if (PRESETS[lower] !== undefined) {
     return { raw, kind: 'interval', intervalMs: PRESETS[lower]! };
   }
 
-  const every = EVERY_RE.exec(raw);
+  const every = EVERY_RE.exec(normalized);
   if (every) {
     const n = Number(every[1]);
     const unit = every[2]!.toLowerCase();
@@ -63,7 +67,7 @@ export function parseSchedule(input: string): Schedule {
   }
 
   // Bare number+unit without "every": "1 min", "30 mins", "2 hours", "1 day"
-  const bare = BARE_INTERVAL_RE.exec(raw);
+  const bare = BARE_INTERVAL_RE.exec(normalized);
   if (bare) {
     const n = Number(bare[1]);
     const unit = bare[2]!.toLowerCase();
@@ -73,7 +77,7 @@ export function parseSchedule(input: string): Schedule {
     return { raw, kind: 'interval', intervalMs: n * UNIT_MS[unit]! };
   }
 
-  if (WEEKDAY_RE.test(raw)) {
+  if (WEEKDAY_RE.test(normalized)) {
     // v1 simplification: weekday-named schedules use a 7-day interval.
     // The day name is preserved in `raw` so the UI can show it accurately.
     return { raw, kind: 'interval', intervalMs: 7 * DAY_MS };

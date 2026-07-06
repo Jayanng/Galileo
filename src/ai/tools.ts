@@ -299,7 +299,7 @@ export const toolDefinitions: ChatTool[] = [
           },
           schedule: {
             type: 'string',
-            description: 'Frequency: "daily", "weekly", "hourly", "every N minutes/hours/days".',
+            description: 'Frequency: "daily", "weekly", "hourly", "every N minutes/hours/days", "1 min", "30 mins", "2 hours". Accepts bare number+unit like "1 min" or phrases like "in the next 1 minute" (normalized).',
           },
           walletId: {
             type: 'string',
@@ -333,7 +333,7 @@ export const toolDefinitions: ChatTool[] = [
           },
           schedule: {
             type: 'string',
-            description: 'Frequency: "daily", "weekly", "hourly", "every N minutes/hours/days".',
+            description: 'Frequency: "daily", "weekly", "hourly", "every N minutes/hours/days", "1 min", "30 mins", "2 hours". Accepts bare number+unit like "1 min" or phrases like "in the next 1 minute" (normalized).',
           },
           walletId: {
             type: 'string',

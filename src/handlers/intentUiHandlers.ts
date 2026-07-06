@@ -42,18 +42,23 @@ export interface DcaDraft {
  *   "dollar-cost average 0.5 OG into USDT daily"
  *   "dollar cost average 1 OG into USDC weekly"
  *   "recurring swap 1 OG to USDC every Monday"
+ *   "dca 1 OG into USDC in the next 1 minute"
+ *   "dca 1 OG to USDC in 30 mins"
  *
  * Returns the extracted draft or null if the phrase doesn't match a clear shape.
  */
 export function parseDcaText(text: string): DcaDraft | null {
+  // Standard: "dca X FROM into TO <schedule>"
   const re = /^(?:dca(?:\s+me)?|dollar[\s-]cost\s+average|recurring\s+swap)\s+([\d.]+)\s+(\w+)\s+(?:into|to|for)\s+(\w+)\s+(.+)$/i;
-  const m = re.exec(text.trim());
-  if (!m) return null;
-  const amount = m[1]!;
-  const fromToken = m[2]!.toUpperCase();
-  const toToken = m[3]!.toUpperCase();
-  const schedule = m[4]!.trim();
-  return { amount, fromToken, toToken, schedule };
+  let m = re.exec(text.trim());
+  if (m) {
+    const amount = m[1]!;
+    const fromToken = m[2]!.toUpperCase();
+    const toToken = m[3]!.toUpperCase();
+    const schedule = m[4]!.trim();
+    return { amount, fromToken, toToken, schedule };
+  }
+  return null;
 }
 
 /** Stage a DCA intent from a parsed draft. Reuses executeTool for validation. */
@@ -159,6 +164,7 @@ export interface SendScheduleDraft {
  *   "recurring send 0.1 to 0xADDR every 6 hours"
  *   "schedule send 0.5 OG to @bob weekly"
  *   "send 0.1 OG to @alice every day"
+ *   "send 1 OG to @alice in the next 1 minute"
  *   "recurring transfer 1 OG to 0xADDR hourly"
  *
  * Returns the extracted draft or null if the phrase doesn't match.
@@ -168,13 +174,15 @@ export function parseSendScheduleText(text: string): SendScheduleDraft | null {
   const main = /^(?:recurring\s+(?:send|transfer)|schedule\s+send)\s+([\d.]+)\s*(?:og)?\s+to\s+(\S+)\s+(.+)$/i;
   let m = main.exec(text.trim());
   if (m) {
-    return { amount: m[1]!, recipient: m[2]!, schedule: m[3]!.trim() };
+    const schedule = m[3]!.trim();
+    return { amount: m[1]!, recipient: m[2]!, schedule };
   }
-  // "send <amount> [OG] to <recipient> every|daily|weekly|hourly" — catches "send 0.1 OG to @alice every day"
-  const sendEvery = /^send\s+([\d.]+)\s*(?:og)?\s+to\s+(\S+)\s+(every\s+.+|daily|weekly|hourly|hour|day|week)$/i;
+  // "send <amount> [OG] to <recipient> every|daily|weekly|hourly|in the next" — catches "send 0.1 OG to @alice every day"
+  const sendEvery = /^send\s+([\d.]+)\s*(?:og)?\s+to\s+(\S+)\s+(every\s+.+|daily|weekly|hourly|hour|day|week|in\s+(?:the\s+next\s+)?\d+\s+(?:min|mins|minutes|hour|hours|day|days))$/i;
   m = sendEvery.exec(text.trim());
   if (m) {
-    return { amount: m[1]!, recipient: m[2]!, schedule: m[3]!.trim() };
+    const schedule = m[3]!.trim();
+    return { amount: m[1]!, recipient: m[2]!, schedule };
   }
   return null;
 }

@@ -46,7 +46,7 @@ Then verify the action yourself, in any browser, by root hash:
 
 ---
 
-[Features](#what-galileo-does) · [Why Galileo](#why-galileo-exists) · [Quick Start](#quick-start) · [Architecture](#how-its-built) · [0G Integration Reference](0G-INTEGRATION.md) · [Usage Reference](docs/USAGE.md) · [Testing Reference](docs/TESTING.md) · [Deploy Guide](DEPLOY.md) · [Project Structure](#project-structure) · [Roadmap](#roadmap)
+[Features](#features) · [Why Galileo](#why-galileo) · [Quick Start](#quick-start) · [Architecture](#architecture) · [0G Integration Reference](0G-INTEGRATION.md) · [Usage Reference](docs/USAGE.md) · [Testing Reference](docs/TESTING.md) · [Deploy Guide](DEPLOY.md) · [Project Structure](#project-structure) · [Roadmap](#roadmap)
 
 <img src="docs/architecture.svg" alt="Galileo Architecture" width="100%"/>
 
@@ -54,7 +54,7 @@ Then verify the action yourself, in any browser, by root hash:
 
 ---
 
-## 🌍 Why Galileo Exists
+## 🌍 Why Galileo
 
 Most AI wallets treat the LLM as a chatbot bolted onto a wallet. **Galileo treats the LLM as
 an agent that moves value — and refuses to do so without a verifiable proof that the user
@@ -123,7 +123,7 @@ Just open Telegram and talk. That's it.
 
 ---
 
-## 💡 What Galileo Does
+## 💡 Features
 
 Galileo is feature-rich under the hood, but the surface is one thing: **type what you want
 and it happens — provably.** Every action below ends with a public verification link from
@@ -433,7 +433,7 @@ proof is public.
 
 ---
 
-## 🏗 How It's Built
+## 🏗 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
